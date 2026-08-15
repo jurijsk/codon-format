@@ -6,7 +6,7 @@
 	"author": "Jurijs Kovzels",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/jurijsk/codon-format"
+		"url": "git+https://github.com/jurijsk/codon-format.git"
 	},
 	"keywords": [
 		"markdown",
@@ -21,7 +21,7 @@
 	"main": "./out/markdownTextFormat.js",
 	"types": "./out/markdownTextFormat.d.ts",
 	"bin": {
-		"codon-format": "./out/formatMdCli.js"
+		"codon-format": "out/formatMdCli.js"
 	},
 	"files": [
 		"out"
