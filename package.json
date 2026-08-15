@@ -1,0 +1,43 @@
+{
+	"name": "@jurijsk/codon-format",
+	"version": "0.1.0",
+	"description": "Codon's canonical markdown formatter (tables, paragraph reflow) as a standalone, vscode-free CLI and library — used by the jurijsk.codon VS Code extension and runnable anywhere Node runs.",
+	"license": "MIT",
+	"author": "Jurijs Kovzels",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jurijsk/codon-format"
+	},
+	"keywords": [
+		"markdown",
+		"formatter",
+		"gfm",
+		"tables",
+		"codon"
+	],
+	"engines": {
+		"node": ">=18"
+	},
+	"main": "./out/markdownTextFormat.js",
+	"types": "./out/markdownTextFormat.d.ts",
+	"bin": {
+		"codon-format": "./out/formatMdCli.js"
+	},
+	"files": [
+		"out"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"compile": "tsc -p ./",
+		"prepublishOnly": "npm run compile && npm test",
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
+	"devDependencies": {
+		"@types/node": "^22.19.19",
+		"typescript": "^5.9.2",
+		"vitest": "^4.1.6"
+	}
+}

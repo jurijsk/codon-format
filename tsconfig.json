@@ -1,0 +1,21 @@
+{
+	"compilerOptions": {
+		"module": "commonjs",
+		"target": "ES2024",
+		"lib": [
+			"ES2024"
+		],
+		"types": ["node"],
+		"outDir": "out",
+		"sourceMap": true,
+		"declaration": true,
+		"strict": true,
+		"rootDir": "src"
+	},
+	"exclude": [
+		"node_modules",
+		"out",
+		"test",
+		"vitest.config.mts"
+	]
+}
