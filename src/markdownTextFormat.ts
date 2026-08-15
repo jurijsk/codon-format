@@ -706,7 +706,7 @@ interface ParsedTable {
 /** Exact header key for cross-table width matching: cell text in order. Two tables with the same
  *  key (same labels, same order) are a "same schema" group — see computeGroupWidths. */
 function tableHeaderKey(table: ParsedTable): string {
-	return table.rows[0].map((cell) => cell.trim()).join(' ');
+	return table.rows[0].map((cell) => cell.trim()).join(' ');
 }
 
 /** Column widths shared by every table in a header-matched group, computed as if all their rows
