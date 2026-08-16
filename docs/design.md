@@ -15,11 +15,11 @@ answer to "where does X happen":
 | `frontmatter.ts`     | Where do we detect YAML frontmatter?                                                                                                                                                                     |
 | `mdc.ts`             | Where do we detect MDC block components (`::name … ::`)?                                                                                                                                                 |
 | `reflow.ts`          | Where do we join wrapped paragraphs/list items onto one line?                                                                                                                                            |
-| `listTighten.ts`     | Where do we drop blank lines between simple list items?                                                                                                                                                  |
+| `list-tighten.ts`    | Where do we drop blank lines between simple list items?                                                                                                                                                  |
 | `tables.ts`          | Where do we format tables — parsing, column widths, wrapping, cross-table matching, emission?                                                                                                            |
 | `eol.ts`             | Where do we detect/normalize line endings?                                                                                                                                                               |
 
-`frontmatter.ts` and `mdc.ts` exist for **detection only** — `reflow.ts`, `listTighten.ts`, and
+`frontmatter.ts` and `mdc.ts` exist for **detection only** — `reflow.ts`, `list-tighten.ts`, and
 `tables.ts` each call into them to find out which lines to leave completely alone, rather than
 duplicating that detection logic three times.
 

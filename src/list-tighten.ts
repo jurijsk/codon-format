@@ -1,5 +1,5 @@
 /**
- * listTighten.ts — the list-tightening pass: drop blank lines between the items of a SIMPLE list.
+ * list-tighten.ts — the list-tightening pass: drop blank lines between the items of a SIMPLE list.
  */
 import { computeYamlMetadataBlockLines } from './frontmatter';
 import { computeMdcBlockLines } from './mdc';

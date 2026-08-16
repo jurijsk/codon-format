@@ -7,7 +7,7 @@
  *   - frontmatter.ts  — YAML metadata block detection (so it's never touched by other passes)
  *   - mdc.ts          — MDC block-component detection (same reason)
  *   - reflow.ts       — paragraph/list-item reflow (one line each)
- *   - listTighten.ts  — dropping blank lines between simple list items
+ *   - list-tighten.ts — dropping blank lines between simple list items
  *   - tables.ts       — the GFM table engine: parsing, column widths, wrapping, emission
  *
  * See ../docs/design.md for the full design writeup (why each decision, not just what it does).
@@ -46,7 +46,7 @@
  */
 import { dominantEol, withEol } from './eol';
 import { reflowLines } from './reflow';
-import { tightenListLines } from './listTighten';
+import { tightenListLines } from './list-tighten';
 import { MIN_TABLE_WIDTH, scanTables, emitTableLines, emitTable, emitLogicalTable, transformTableLines, tableHeaderKey, computeGroupWidths, type ParsedTable } from './tables';
 
 export type { Eol } from './eol';
@@ -54,7 +54,7 @@ export { dominantEol, withEol } from './eol';
 export { computeYamlMetadataBlockLines } from './frontmatter';
 export { computeMdcBlockLines } from './mdc';
 export { reflowLines } from './reflow';
-export { tightenListLines } from './listTighten';
+export { tightenListLines } from './list-tighten';
 export { splitTableRow, isDelimiterLine } from './tables';
 
 export interface FormatMarkdownTextOptions {

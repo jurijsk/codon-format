@@ -88,7 +88,7 @@ WYSIWYG preview — so whatever this CLI produces is exactly what the editor wou
 ## Development
 
 The source is split by concern (`src/tables.ts`, `src/frontmatter.ts`, `src/mdc.ts`,
-`src/reflow.ts`, `src/listTighten.ts`, `src/eol.ts`, with `src/markdown-format.ts` as the
+`src/reflow.ts`, `src/list-tighten.ts`, `src/eol.ts`, with `src/markdown-format.ts` as the
 orchestrator) — see [docs/design.md](docs/design.md) for the full writeup: the *why* behind the
 table engine's width regimes, cross-table matching, the CLI's `--check` semantics, and known
 pitfalls.
