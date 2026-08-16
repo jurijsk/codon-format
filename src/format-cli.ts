@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * formatMdCli.ts — the `codon-format` CLI: run Codon's markdown formatter outside the editor
+ * format-cli.ts — the `codon-format` CLI: run Codon's markdown formatter outside the editor
  * entirely — from a pre-commit hook, a CI step, a `tasks.json` task, or any other project's build.
  * Vscode-free, plain Node, no workspace dependency. Installed via this package's `bin` entry:
  *
@@ -11,7 +11,7 @@
  * The `jurijsk.codon` VS Code extension depends on this package and runs the exact same function
  * for every Codon save and Format Document — so `codon-format` and the editor always agree.
  *
- * Rewrites files in place via the same pure text pass (src/markdownTextFormat.ts — no DOM, no
+ * Rewrites files in place via the same pure text pass (src/markdown-format.ts — no DOM, no
  * editor). `--width 0` (the default) is the logical/commit form: one pipe-aligned line per table
  * row. `--width N` (N ≥ 40) wraps table
  * cell text onto continuation rows so table lines stay under N characters — and `--width 0`
@@ -34,7 +34,7 @@
  * caller here rather than rejecting the combination.
  */
 import { readFileSync, writeFileSync } from 'fs';
-import { formatMarkdownText } from './markdownTextFormat';
+import { formatMarkdownText } from './markdown-format';
 
 const files: string[] = [];
 let width = 0;

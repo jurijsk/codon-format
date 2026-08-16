@@ -1,6 +1,6 @@
 /**
  * eol.ts — line-ending helpers shared by every pass. Every pass works on LF-split lines
- * internally; the top-level entry points (markdownTextFormat.ts) re-apply whichever EOL style the
+ * internally; the top-level entry points (markdown-format.ts) re-apply whichever EOL style the
  * input actually used, so a CRLF file stays CRLF and an LF file stays LF.
  */
 

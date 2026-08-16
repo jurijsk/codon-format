@@ -36,10 +36,6 @@ export function isDelimiterLine(line: string): boolean {
 const MIN_COLUMN_WIDTH = 3;
 /** The narrowest meaningful set width — below this the shrink loop can't do useful work. */
 export const MIN_TABLE_WIDTH = 40;
-/** Width-0 padding cap: pipes align up to this many characters per column; a monster cell
- *  (key-value dumps run to thousands of chars) overflows its own column instead of forcing
- *  megabytes of alignment spaces onto every other row. */
-const MAX_PAD_WIDTH = 80;
 
 type ColumnAlign = 'left' | 'center' | 'right' | null;
 
@@ -150,7 +146,7 @@ function computeColumnWidths(rows: string[][], cols: number, maxLineLength: numb
 			}
 		}
 		const base = Math.max(maxCell, MIN_COLUMN_WIDTH);
-		widths.push(maxLineLength === 0 ? Math.min(base, MAX_PAD_WIDTH) : base);
+		widths.push(base);
 		floors.push(floor);
 	}
 	while (maxLineLength > 0 && totalLineLength(widths, indentLength) > maxLineLength) {

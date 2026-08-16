@@ -1,5 +1,5 @@
 /**
- * markdownTextFormat.ts — the public entry point for `@jurijsk/codon-format`: wires the
+ * markdown-format.ts — the public entry point for `@jurijsk/codon-format`: wires the
  * individual passes into the one function Codon and the CLI both call. Read THIS file to see the
  * SHAPE of the pipeline; each pass's own reasoning lives in its own module:
  *
@@ -14,7 +14,7 @@
  *
  * A PURE text→text pass. No DOM, no editor, no TipTap — plain string processing, adapted from the
  * water project's format-markdown scripts. Vscode-free AND DOM-free, so it runs synchronously in
- * the `codon-format` CLI (formatMdCli.ts, this package), as a library import, and under
+ * the `codon-format` CLI (format-cli.ts, this package), as a library import, and under
  * plain-node vitest.
  *
  * THE SINGLE LAYOUT AUTHORITY for the jurijsk.codon VS Code extension (a separate repo,
@@ -29,7 +29,7 @@
  *   - Codon's webview is always FED the logical width-0 form (tablesToLogicalRows) — it never
  *     sees, and never thinks about, raw-file layout.
  *
- * CONTRACT (pinned in test/markdownTextFormat.test.ts, this package):
+ * CONTRACT (pinned in test/markdown-format.test.ts, this package):
  *   1. IDEMPOTENT — format(format(x)) === format(x), at every width.
  *   2. PIPELINE-STABLE (verified in the jurijsk.codon repo, test/formatParity.test.ts there — it
  *      needs jsdom + the real TipTap pipeline, which can't live in this vscode-free package): for

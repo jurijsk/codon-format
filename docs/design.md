@@ -9,15 +9,15 @@ before touching the table engine, and pitfalls that already bit us once.
 The formatter is split by concern, not left as one large file — the file you want is usually the
 answer to "where does X happen":
 
-| File | Answers |
-| --- | --- |
-| `markdownTextFormat.ts` | The orchestrator — `formatMarkdownText`/`tablesToLogicalRows`, wiring the passes below into the one function Codon and the CLI call. Read this file first; it's the pipeline's shape, not its internals. |
-| `frontmatter.ts` | Where do we detect YAML frontmatter? |
-| `mdc.ts` | Where do we detect MDC block components (`::name … ::`)? |
-| `reflow.ts` | Where do we join wrapped paragraphs/list items onto one line? |
-| `listTighten.ts` | Where do we drop blank lines between simple list items? |
-| `tables.ts` | Where do we format tables — parsing, column widths, wrapping, cross-table matching, emission? |
-| `eol.ts` | Where do we detect/normalize line endings? |
+| File                 | Answers                                                                                                                                                                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `markdown-format.ts` | The orchestrator — `formatMarkdownText`/`tablesToLogicalRows`, wiring the passes below into the one function Codon and the CLI call. Read this file first; it's the pipeline's shape, not its internals. |
+| `frontmatter.ts`     | Where do we detect YAML frontmatter?                                                                                                                                                                     |
+| `mdc.ts`             | Where do we detect MDC block components (`::name … ::`)?                                                                                                                                                 |
+| `reflow.ts`          | Where do we join wrapped paragraphs/list items onto one line?                                                                                                                                            |
+| `listTighten.ts`     | Where do we drop blank lines between simple list items?                                                                                                                                                  |
+| `tables.ts`          | Where do we format tables — parsing, column widths, wrapping, cross-table matching, emission?                                                                                                            |
+| `eol.ts`             | Where do we detect/normalize line endings?                                                                                                                                                               |
 
 `frontmatter.ts` and `mdc.ts` exist for **detection only** — `reflow.ts`, `listTighten.ts`, and
 `tables.ts` each call into them to find out which lines to leave completely alone, rather than
@@ -57,13 +57,16 @@ duplicating that detection logic three times.
 - Values `1–39` clamp up to 40 (`MIN_TABLE_WIDTH`) — below that the shrink-to-fit loop can't do
   anything useful with real cell content.
 
-### Width-0 padding has its own cap
+### Width-0 padding has no cap — alignment always wins
 
-At width 0, columns pad to their widest cell — except `MAX_PAD_WIDTH` (80 chars) caps it. A single
-monster cell (a key-value dump running to thousands of characters, which real fixtures in Codon's
-`examples/` corpus actually contain) would otherwise force every *other* row in that column to pad
-out to match it. Past the cap, the monster cell keeps its full content and simply overflows its own
-column — content is never truncated, only the *alignment* gives up.
+At width 0, columns pad to their widest cell, uncapped. An earlier version capped padding at 80
+chars (`MAX_PAD_WIDTH`) so a monster cell (a key-value dump running to thousands of characters,
+which real fixtures in Codon's `examples/` corpus actually contain) wouldn't force every *other*
+row in that column to pad out to match it — past the cap, the monster cell kept its full content
+and simply overflowed its own column, alignment giving up before content did. That traded away the
+one thing width-0 exists to guarantee: every row's pipes actually line up. The cap is gone now — a
+genuinely huge cell inflates its column's padding for every row, which is the correct trade for a
+regime whose entire purpose is visual alignment. Content is still never truncated.
 
 ### The shrink-to-fit loop (width N)
 
