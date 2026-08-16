@@ -7,6 +7,7 @@
  * of losing cells. See ../docs/design.md for the width-regime and cross-table-matching rationale.
  */
 import { computeMdcBlockLines } from './mdc';
+import { computeFenceProtectedLines } from './fences';
 
 /** Split a `| a | b |` row into trimmed cells, honouring escaped pipes (`\|` stays in-cell). */
 export function splitTableRow(line: string): string[] {
@@ -274,18 +275,11 @@ export interface TableBlock {
 export function scanTables(lines: string[]): TableBlock[] {
 	const blocks: TableBlock[] = [];
 	const mdcBlock = computeMdcBlockLines(lines);
-	let inCode = false;
+	const fenceProtected = computeFenceProtectedLines(lines);
 	for (let index = 0; index < lines.length; index += 1) {
 		const line = lines[index];
 		const trimmed = line.trimStart();
-		if (mdcBlock[index]) {
-			continue;
-		}
-		if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
-			inCode = !inCode;
-			continue;
-		}
-		if (inCode) {
+		if (mdcBlock[index] || fenceProtected[index]) {
 			continue;
 		}
 		if (!trimmed.startsWith('|') || !isDelimiterLine(lines[index + 1] ?? '')) {

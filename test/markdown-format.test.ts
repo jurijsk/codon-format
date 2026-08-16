@@ -121,13 +121,21 @@ describe('structural pass-through', () => {
 		expect(out).toContain('prose that wraps');
 	});
 
-	it('a dormant Quarto cell (fenced code inside an HTML comment) before an MDC block does not desync fence tracking', () => {
-		// The embedded fence marker inside the HTML comment must never flip mdc.ts's own
-		// fence-toggle — regression for a bug where it did, silently hiding every MDC block
-		// for the rest of the file.
-		const src = '<!-- ```{r}\nlibrary(x)\n``` -->\n\n::card\nslot text\nwrapped\n::\n';
+	// Not Quarto/R-specific — the fence check never inspects what follows the marker (an info
+	// string like `{r}`/`python`/`bash`, or nothing at all), so a fence marker embedded inside an
+	// HTML comment desyncs fence tracking identically regardless of language or fence style.
+	// `{r}` is the realistic motivating case (a Quarto "dormant cell" — a code chunk commented out
+	// so it renders but doesn't execute); these cases pin that the fix isn't scoped to it.
+	it.each([
+		['R chunk (the original motivating case)', '```{r}\nlibrary(x)\n```'],
+		['Python chunk', '```{python}\nimport x\n```'],
+		['bash chunk', '```bash\necho hi\n```'],
+		['no language tag at all', '```\nanything\n```'],
+		['tilde fence instead of backticks', '~~~{r}\nlibrary(x)\n~~~'],
+	])('a commented-out fenced code cell (%s) before an MDC block does not desync fence tracking', (_label, fenced) => {
+		const src = `<!-- ${fenced} -->\n\n::card\nslot text\nwrapped\n::\n`;
 		const out = formatMarkdownText(src);
-		expect(out).toContain('<!-- ```{r}\nlibrary(x)\n``` -->');
+		expect(out).toContain(`<!-- ${fenced} -->`);
 		expect(out).toContain('::card\nslot text\nwrapped\n::');
 	});
 });
@@ -136,6 +144,24 @@ describe('table normalization — width 0 (pipe-aligned logical rows)', () => {
 	it('rewrites a compact table to pipe-aligned padded columns, alignment preserved', () => {
 		const out = formatMarkdownText('|A|B|C|\n|:-|:-:|-:|\n|x|y|z|\n');
 		expect(out).toBe('| A   | B   | C   |\n| :-- | :-: | --: |\n| x   | y   | z   |\n');
+	});
+
+	// tables.ts keeps its own independent fence-toggle (separate from mdc.ts's) — same class of
+	// regression, and equally language-agnostic: the embedded fence marker inside the HTML comment
+	// must not flip it, or every table for the rest of the file goes undetected and passes through
+	// unpadded. `{r}` is the realistic motivating case (a Quarto "dormant cell"); these cases pin
+	// that the fix isn't scoped to it.
+	it.each([
+		['R chunk (the original motivating case)', '```{r}\nlibrary(x)\n```'],
+		['Python chunk', '```{python}\nimport x\n```'],
+		['bash chunk', '```bash\necho hi\n```'],
+		['no language tag at all', '```\nanything\n```'],
+		['tilde fence instead of backticks', '~~~{r}\nlibrary(x)\n~~~'],
+	])('a commented-out fenced code cell (%s) before a table does not desync scanTables own fence tracking', (_label, fenced) => {
+		const src = `<!-- ${fenced} -->\n\n|A|B|\n|-|-|\n|1|2|\n`;
+		const out = formatMarkdownText(src);
+		expect(out).toContain(`<!-- ${fenced} -->`);
+		expect(out).toContain('| A   | B   |\n| --- | --- |\n| 1   | 2   |');
 	});
 
 	it('pads columns to the widest cell so the pipes align down the page', () => {

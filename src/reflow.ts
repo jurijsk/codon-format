@@ -4,6 +4,7 @@
  */
 import { computeYamlMetadataBlockLines } from './frontmatter';
 import { computeMdcBlockLines } from './mdc';
+import { isFenceMarker, isCommentOpener, isCommentCloser } from './fences';
 
 const LIST_MARKER_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 
@@ -82,7 +83,7 @@ export function reflowLines(lines: string[]): string[] {
 		}
 
 		const trimmed = line.trimStart();
-		if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+		if (isFenceMarker(trimmed)) {
 			flush();
 			inCode = !inCode;
 			out.push(line);
@@ -115,9 +116,9 @@ export function reflowLines(lines: string[]): string[] {
 			// A multi-line HTML comment is emitted verbatim through its `-->` closer — comment
 			// bodies are raw metadata (Codon's pills round-trip them byte-for-byte) and may hold
 			// code whose fences sit mid-line, so the fence toggle above must not see them.
-			if (trimmed.startsWith('<!--') && !line.includes('-->')) {
+			if (isCommentOpener(trimmed, line)) {
 				index += 1;
-				while (index < lines.length && !lines[index].includes('-->')) {
+				while (index < lines.length && !isCommentCloser(lines[index])) {
 					out.push(lines[index]);
 					index += 1;
 				}

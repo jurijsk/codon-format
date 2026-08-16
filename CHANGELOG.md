@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3
+
+- Fixed the same dormant-Quarto-cell fence-desync bug from 0.2.2, but in `tables.ts`: `scanTables` kept its own independent fence-toggle (separate from `mdc.ts`'s), which had the identical gap and hid every table for the rest of the file. Same fix, same shape, different file — 0.2.2 only patched `mdc.ts`.
+- Consolidated the duplicated fence/comment-tracking logic that caused both bugs: added `src/fences.ts` as the one shared detector, now used by `mdc.ts`, `tables.ts`, and `list-tighten.ts` instead of each keeping its own copy. Also eliminated every hand-typed `` '```' ``/`'<!--'`/`'-->'` string literal across the codebase in favor of named constants in `fences.ts` — the actual root cause was duplicated logic AND duplicated magic strings, not just one bug in one file.
+
 ## 0.2.2
 
 - Fixed a bug where a commented-out fenced code cell (`<!-- ```{r} … ``` -->`, a dormant Quarto cell) before an MDC block desynced `mdc.ts`'s fence tracking, silently hiding every MDC block for the rest of the file. MDC detection now skips multi-line HTML comments whole, same as the reflow and list-tighten passes already did.
