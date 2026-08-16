@@ -120,6 +120,16 @@ describe('structural pass-through', () => {
 		expect(out).toContain('::lonely\n');
 		expect(out).toContain('prose that wraps');
 	});
+
+	it('a dormant Quarto cell (fenced code inside an HTML comment) before an MDC block does not desync fence tracking', () => {
+		// The embedded fence marker inside the HTML comment must never flip mdc.ts's own
+		// fence-toggle — regression for a bug where it did, silently hiding every MDC block
+		// for the rest of the file.
+		const src = '<!-- ```{r}\nlibrary(x)\n``` -->\n\n::card\nslot text\nwrapped\n::\n';
+		const out = formatMarkdownText(src);
+		expect(out).toContain('<!-- ```{r}\nlibrary(x)\n``` -->');
+		expect(out).toContain('::card\nslot text\nwrapped\n::');
+	});
 });
 
 describe('table normalization — width 0 (pipe-aligned logical rows)', () => {
