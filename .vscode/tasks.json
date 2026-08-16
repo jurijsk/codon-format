@@ -17,7 +17,7 @@
 			},
 			"options": {
 				"statusbar": {
-					"label": "∞"
+					"label": "format:   ∞"
 				}
 			}
 		},

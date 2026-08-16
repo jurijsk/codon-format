@@ -3,6 +3,7 @@
  */
 import { computeYamlMetadataBlockLines } from './frontmatter';
 import { computeMdcBlockLines } from './mdc';
+import { isFenceMarker, isCommentMarker, isCommentOpener, isCommentCloser, computeFenceProtectedLines, FENCE_TICKS, FENCE_TILDES } from './fences';
 
 /** A list-item line for the tightening pass: marker at any indent, content optional (a bare
  *  `- ` parent whose content is only a nested list is still an item). NOT `---` etc. — a run of
@@ -29,33 +30,10 @@ export function tightenListLines(lines: string[]): string[] {
 	const out: string[] = [];
 	const yamlBlock = computeYamlMetadataBlockLines(lines);
 	const mdcBlock = computeMdcBlockLines(lines);
-	let inCode = false;
-	let inComment = false;
+	const fenceProtected = computeFenceProtectedLines(lines);
 	for (let index = 0; index < lines.length; index += 1) {
 		const line = lines[index];
-		if (yamlBlock[index] || mdcBlock[index]) {
-			out.push(line);
-			continue;
-		}
-		if (inComment) {
-			out.push(line);
-			if (line.includes('-->')) {
-				inComment = false;
-			}
-			continue;
-		}
-		const trimmed = line.trimStart();
-		if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
-			inCode = !inCode;
-			out.push(line);
-			continue;
-		}
-		if (inCode) {
-			out.push(line);
-			continue;
-		}
-		if (trimmed.startsWith('<!--') && !line.includes('-->')) {
-			inComment = true;
+		if (yamlBlock[index] || mdcBlock[index] || fenceProtected[index]) {
 			out.push(line);
 			continue;
 		}
@@ -75,14 +53,14 @@ export function tightenListLines(lines: string[]): string[] {
 			if (yamlBlock[scan] || mdcBlock[scan]) {
 				break;
 			}
-			if (currentTrimmed.startsWith('```') || currentTrimmed.startsWith('~~~')) {
+			if (isFenceMarker(currentTrimmed)) {
 				if (!/^\s/.test(current)) {
 					break;
 				} // column-0 fence: a new block, not item content
 				// An indented fence is item content — consume its body whole (it may hold blank
 				// lines and marker-looking lines that must not be treated as list structure).
 				complex = true;
-				const fenceMark = currentTrimmed.startsWith('```') ? '```' : '~~~';
+				const fenceMark = currentTrimmed.startsWith(FENCE_TICKS) ? FENCE_TICKS : FENCE_TILDES;
 				runLines.push(current);
 				scan += 1;
 				while (scan < lines.length && !lines[scan].trimStart().startsWith(fenceMark)) {
@@ -95,14 +73,14 @@ export function tightenListLines(lines: string[]): string[] {
 				}
 				continue;
 			}
-			if (currentTrimmed.startsWith('<!--') && !current.includes('-->')) {
+			if (isCommentOpener(currentTrimmed, current)) {
 				if (!/^\s/.test(current)) {
 					break;
 				} // column-0 comment: its own block
 				complex = true;
 				runLines.push(current);
 				scan += 1;
-				while (scan < lines.length && !lines[scan].includes('-->')) {
+				while (scan < lines.length && !isCommentCloser(lines[scan])) {
 					runLines.push(lines[scan]);
 					scan += 1;
 				}
@@ -126,7 +104,7 @@ export function tightenListLines(lines: string[]): string[] {
 				if (yamlBlock[peek] || mdcBlock[peek]) {
 					break;
 				}
-				if ((peekedTrimmed.startsWith('```') || peekedTrimmed.startsWith('~~~') || peekedTrimmed.startsWith('<!--')) && !/^\s/.test(peeked)) {
+				if ((isFenceMarker(peekedTrimmed) || isCommentMarker(peekedTrimmed)) && !/^\s/.test(peeked)) {
 					break;
 				}
 				const continues = ITEM_LINE_RE.test(peeked) || /^\s+\S/.test(peeked);
