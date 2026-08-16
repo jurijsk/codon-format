@@ -1,7 +1,7 @@
 /**
  * frontmatter.ts — detects YAML metadata blocks (top-of-file frontmatter, or a Pandoc-style
  * mid-document block) so every other pass can leave them alone: the body is structured data, not
- * prose, and must never be joined (reflow.ts), tightened (listTighten.ts), or have its
+ * prose, and must never be joined (reflow.ts), tightened (list-tighten.ts), or have its
  * table-looking lines touched (tables.ts).
  */
 

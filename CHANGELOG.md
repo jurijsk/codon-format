@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Renamed `src/listTighten.ts` → `src/list-tighten.ts` (internal only, no functional change — same kebab-case cleanup as 0.2.0's other renames).
+
 ## 0.2.0
 
 - Width-0 table padding no longer caps at 80 characters — columns always pad to the widest cell, so pipes stay aligned even with very long cells.
