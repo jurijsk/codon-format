@@ -1,0 +1,7 @@
+# Codon machine-written runtime state — recreated each preview; do not commit.
+# Anything else here (e.g. a codon.styles stylesheet) is tracked.
+*.log
+locus.json
+focus.json
+inject-*.cjs
+inject-*.js

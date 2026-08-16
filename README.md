@@ -50,6 +50,8 @@ Exits 1 on any file read/write error too. Each file keeps its own dominant line-
 
 ### Example: pre-commit hook (auto-fix + re-stage)
 
+No `--width` flag below — it defaults to `0`, the only width safe to commit:
+
 ```bash
 #!/usr/bin/env sh
 files=$(git diff --cached --name-only --diff-filter=ACM -- '*.md')
@@ -59,6 +61,8 @@ git add $files
 ```
 
 ### Example: CI gate
+
+Again, no `--width` flag — `--check` alone gates on the default (`0`):
 
 ```bash
 npx codon-format $(git ls-files '*.md') --check
@@ -84,7 +88,7 @@ WYSIWYG preview — so whatever this CLI produces is exactly what the editor wou
 ## Development
 
 The source is split by concern (`src/tables.ts`, `src/frontmatter.ts`, `src/mdc.ts`,
-`src/reflow.ts`, `src/listTighten.ts`, `src/eol.ts`, with `src/markdownTextFormat.ts` as the
+`src/reflow.ts`, `src/listTighten.ts`, `src/eol.ts`, with `src/markdown-format.ts` as the
 orchestrator) — see [docs/design.md](docs/design.md) for the full writeup: the *why* behind the
 table engine's width regimes, cross-table matching, the CLI's `--check` semantics, and known
 pitfalls.

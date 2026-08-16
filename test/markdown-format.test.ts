@@ -1,5 +1,5 @@
 /**
- * The SHIPPED markdown formatter (src/markdownTextFormat.ts) — a pure text→text pass, no DOM,
+ * The SHIPPED markdown formatter (src/markdown-format.ts) — a pure text→text pass, no DOM,
  * exercised here in the plain node environment on purpose: production formatting must never
  * need a browser. Pins the layout contract:
  *
@@ -15,7 +15,7 @@
  * pinned against the real pipeline in test/formatParity.test.ts (jsdom, test-only oracle).
  */
 import { describe, it, expect } from 'vitest';
-import { formatMarkdownText, tablesToLogicalRows, dominantEol, withEol, reflowLines, splitTableRow, isDelimiterLine } from '../src/markdownTextFormat.js';
+import { formatMarkdownText, tablesToLogicalRows, dominantEol, withEol, reflowLines, splitTableRow, isDelimiterLine } from '../src/markdown-format.js';
 
 describe('paragraph reflow', () => {
 	it('joins a wrapped paragraph to one line', () => {
@@ -197,14 +197,14 @@ describe('table width fitting (codon.tableWidth / --width) and the logical form'
 		expect(formatMarkdownText(wide, { tableWidth: 10 })).toBe(formatMarkdownText(wide, { tableWidth: 40 }));
 	});
 
-	it('width-0 padding caps at 80 chars — a monster cell overflows its column instead of inflating every row', () => {
+	it('width-0 padding has no cap — every row pads out to a monster cell so pipes stay aligned', () => {
 		const monster = 'x'.repeat(300);
 		const out = formatMarkdownText(`| K | V |\n| --- | --- |\n| a | ${monster} |\n| b | short |\n`);
 		const lines = out.trimEnd().split('\n');
-		// The short rows pad to the cap, not to the monster's 300 chars.
-		expect(lines[0].length).toBeLessThanOrEqual(100);
-		expect(lines[3].length).toBeLessThanOrEqual(100);
-		// The monster row keeps its full content (overflowing its column is fine — content first).
+		// All four lines are the same length — the short rows pad out to the monster's width.
+		expect(lines[0].length).toBe(lines[2].length);
+		expect(lines[3].length).toBe(lines[2].length);
+		// The monster row keeps its full content.
 		expect(lines[2]).toContain(monster);
 	});
 

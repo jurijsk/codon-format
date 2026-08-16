@@ -1,5 +1,5 @@
 /**
- * formatMdCli.test.ts — exercises the COMPILED CLI (out/formatMdCli.js) as a subprocess, the same
+ * format-cli.test.ts — exercises the COMPILED CLI (out/format-cli.js) as a subprocess, the same
  * way an external consumer (pre-commit hook, CI step, another project's tasks.json) would call it.
  * Deliberately black-box: no importing the module's internals, since its whole point is to be a
  * standalone, vscode-free executable.
@@ -10,7 +10,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const CLI = join(__dirname, '..', 'out', 'formatMdCli.js');
+const CLI = join(__dirname, '..', 'out', 'format-cli.js');
 const UNFORMATTED = '| Name | Note |\n| --- | --- |\n| Ada Lovelace | x |\n';
 const CANONICAL = '| Name         | Note |\n| ------------ | ---- |\n| Ada Lovelace | x    |\n';
 
@@ -31,7 +31,7 @@ function run(args: string[]): { status: number; stdout: string; stderr: string }
 	}
 }
 
-describe('formatMdCli (compiled CLI, run as a subprocess)', () => {
+describe('format-cli (compiled CLI, run as a subprocess)', () => {
 	beforeAll(() => {
 		// Fails loudly if `npm run compile` hasn't been run — the whole test is meaningless
 		// against a stale/missing build.

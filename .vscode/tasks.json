@@ -1,0 +1,124 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Format: width 0 (commit form)",
+			"type": "shell",
+			"command": "node",
+			"args": ["${workspaceFolder}/out/format-cli.js", "${file}", "--width", "0"],
+			"dependsOn": "compile",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "silent",
+				"focus": false,
+				"panel": "shared",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"options": {
+				"statusbar": {
+					"label": "∞"
+				}
+			}
+		},
+		{
+			"label": "Format: width 80",
+			"type": "shell",
+			"command": "node",
+			"args": ["${workspaceFolder}/out/format-cli.js", "${file}", "--width", "80"],
+			"dependsOn": "compile",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "silent",
+				"focus": false,
+				"panel": "shared",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"options": {
+				"statusbar": {
+					"label": "80"
+				}
+			}
+		},
+		{
+			"label": "Format: width 120",
+			"type": "shell",
+			"command": "node",
+			"args": ["${workspaceFolder}/out/format-cli.js", "${file}", "--width", "120"],
+			"dependsOn": "compile",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "silent",
+				"focus": false,
+				"panel": "shared",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"options": {
+				"statusbar": {
+					"label": "120"
+				}
+			}
+		},
+		{
+			"label": "Format: width 160",
+			"type": "shell",
+			"command": "node",
+			"args": ["${workspaceFolder}/out/format-cli.js", "${file}", "--width", "160"],
+			"dependsOn": "compile",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "silent",
+				"focus": false,
+				"panel": "shared",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"options": {
+				"statusbar": {
+					"label": "160"
+				}
+			}
+		},
+		{
+			"label": "Format: width 200",
+			"type": "shell",
+			"command": "node",
+			"args": ["${workspaceFolder}/out/format-cli.js", "${file}", "--width", "200"],
+			"dependsOn": "compile",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "silent",
+				"focus": false,
+				"panel": "shared",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"options": {
+				"statusbar": {
+					"label": "200"
+				}
+			}
+		},
+		{
+			"label": "compile",
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "compile"],
+			"problemMatcher": ["$tsc"],
+			"presentation": {
+				"reveal": "silent",
+				"focus": false,
+				"panel": "shared",
+				"clear": false,
+				"showReuseMessage": false
+			},
+			"options": {
+				"statusbar": {
+					"hide": true
+				}
+			}
+		}
+	]
+}
