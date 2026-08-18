@@ -33,8 +33,8 @@
  * other uses (e.g. checking a file is already wrapped at a specific width) — the CLI trusts the
  * caller here rather than rejecting the combination.
  */
-import { readFileSync, writeFileSync } from 'fs';
-import { formatMarkdownText } from './markdown-format';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { formatMarkdownText } from './markdown-format.js';
 
 const files: string[] = [];
 let width = 0;

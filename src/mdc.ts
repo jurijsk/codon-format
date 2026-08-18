@@ -5,7 +5,7 @@
  * Mdc editor node (the convergence contract that keeps Format Document and the WYSIWYG editor
  * agreeing depends on both sides treating this region identically).
  */
-import { computeFenceProtectedLines } from './fences';
+import { computeFenceProtectedLines } from './fences.js';
 
 /**
  * Flag every line of a well-formed MDC block component (`::name` / `::name{props}` opener

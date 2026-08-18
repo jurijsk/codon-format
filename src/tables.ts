@@ -6,8 +6,8 @@
  * preserved (water always writes plain dashes), and ragged rows pad out to the widest row instead
  * of losing cells. See ../docs/design.md for the width-regime and cross-table-matching rationale.
  */
-import { computeMdcBlockLines } from './mdc';
-import { computeFenceProtectedLines } from './fences';
+import { computeMdcBlockLines } from './mdc.js';
+import { computeFenceProtectedLines } from './fences.js';
 
 /** Split a `| a | b |` row into trimmed cells, honouring escaped pipes (`\|` stays in-cell). */
 export function splitTableRow(line: string): string[] {
