@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- **BREAKING: the package is now ESM-only** (`"type": "module"`). `import { formatMarkdownText } from '@jurijsk/codon-format'` is unchanged and keeps working; a CommonJS `require('@jurijsk/codon-format')` no longer does, except on Node >= 22.12, which supports `require()` of a synchronous ES module. That is a semver-major-flavored change, hence the minor bump on a 0.x line.
+- **BREAKING: `engines.node` raised from `>=18` to `>=20.11`** — needed for `import.meta.dirname`. Node 18 has been end-of-life since April 2025.
+- Added an `exports` map so the package entry (and its types) resolve through the modern conditional-exports path instead of bare `main`/`types`.
+- No formatter behavior changes: the output for any given input is byte-identical to 0.2.3. Internals moved from TypeScript's CommonJS emit to real ES modules (relative imports now carry explicit `.js` extensions, Node builtins use `node:` specifiers), and the CLI/`bin` runs as a module.
+
 ## 0.2.3
 
 - Fixed the same dormant-Quarto-cell fence-desync bug from 0.2.2, but in `tables.ts`: `scanTables` kept its own independent fence-toggle (separate from `mdc.ts`'s), which had the identical gap and hid every table for the rest of the file. Same fix, same shape, different file — 0.2.2 only patched `mdc.ts`.

@@ -1,9 +1,9 @@
 /**
  * list-tighten.ts — the list-tightening pass: drop blank lines between the items of a SIMPLE list.
  */
-import { computeYamlMetadataBlockLines } from './frontmatter';
-import { computeMdcBlockLines } from './mdc';
-import { isFenceMarker, isCommentMarker, isCommentOpener, isCommentCloser, computeFenceProtectedLines, FENCE_TICKS, FENCE_TILDES } from './fences';
+import { computeYamlMetadataBlockLines } from './frontmatter.js';
+import { computeMdcBlockLines } from './mdc.js';
+import { isFenceMarker, isCommentMarker, isCommentOpener, isCommentCloser, computeFenceProtectedLines, FENCE_TICKS, FENCE_TILDES } from './fences.js';
 
 /** A list-item line for the tightening pass: marker at any indent, content optional (a bare
  *  `- ` parent whose content is only a nested list is still an item). NOT `---` etc. — a run of

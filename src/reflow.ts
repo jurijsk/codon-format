@@ -2,9 +2,9 @@
  * reflow.ts — the paragraph-reflow pass: join each wrapped paragraph / list item onto a single
  * line (the serializer's layout), leaving every structural construct untouched.
  */
-import { computeYamlMetadataBlockLines } from './frontmatter';
-import { computeMdcBlockLines } from './mdc';
-import { isFenceMarker, isCommentOpener, isCommentCloser } from './fences';
+import { computeYamlMetadataBlockLines } from './frontmatter.js';
+import { computeMdcBlockLines } from './mdc.js';
+import { isFenceMarker, isCommentOpener, isCommentCloser } from './fences.js';
 
 const LIST_MARKER_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 

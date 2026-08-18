@@ -16,6 +16,8 @@ Codon's canonical markdown formatter — table alignment, paragraph reflow, and 
 npm install --save-dev @jurijsk/codon-format
 ```
 
+Requires **Node >= 20.11**. The package is **ESM-only** (`"type": "module"`) — `import` it. A CommonJS `require('@jurijsk/codon-format')` only works on Node >= 22.12, which supports `require()` of a synchronous ES module.
+
 ## CLI
 
 ```

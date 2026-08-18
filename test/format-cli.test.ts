@@ -10,7 +10,9 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const CLI = join(__dirname, '..', 'out', 'format-cli.js');
+// import.meta.dirname, not __dirname: this package is ESM ("type": "module"), where the CJS
+// wrapper variables don't exist. Needs Node >= 20.11, which is the `engines.node` floor.
+const CLI = join(import.meta.dirname, '..', 'out', 'format-cli.js');
 const UNFORMATTED = '| Name | Note |\n| --- | --- |\n| Ada Lovelace | x |\n';
 const CANONICAL = '| Name         | Note |\n| ------------ | ---- |\n| Ada Lovelace | x    |\n';
 

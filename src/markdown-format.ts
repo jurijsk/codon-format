@@ -44,18 +44,18 @@
  * block components (mdc.ts) plus bare `:`-directive lines, link reference definitions, Quarto
  * shortcodes (`{{< ... >}}`), and lines ending in a hard break (`\` or two trailing spaces).
  */
-import { dominantEol, withEol } from './eol';
-import { reflowLines } from './reflow';
-import { tightenListLines } from './list-tighten';
-import { MIN_TABLE_WIDTH, scanTables, emitTableLines, emitTable, emitLogicalTable, transformTableLines, tableHeaderKey, computeGroupWidths, type ParsedTable } from './tables';
+import { dominantEol, withEol } from './eol.js';
+import { reflowLines } from './reflow.js';
+import { tightenListLines } from './list-tighten.js';
+import { MIN_TABLE_WIDTH, scanTables, emitTableLines, emitTable, emitLogicalTable, transformTableLines, tableHeaderKey, computeGroupWidths, type ParsedTable } from './tables.js';
 
-export type { Eol } from './eol';
-export { dominantEol, withEol } from './eol';
-export { computeYamlMetadataBlockLines } from './frontmatter';
-export { computeMdcBlockLines } from './mdc';
-export { reflowLines } from './reflow';
-export { tightenListLines } from './list-tighten';
-export { splitTableRow, isDelimiterLine } from './tables';
+export type { Eol } from './eol.js';
+export { dominantEol, withEol } from './eol.js';
+export { computeYamlMetadataBlockLines } from './frontmatter.js';
+export { computeMdcBlockLines } from './mdc.js';
+export { reflowLines } from './reflow.js';
+export { tightenListLines } from './list-tighten.js';
+export { splitTableRow, isDelimiterLine } from './tables.js';
 
 export interface FormatMarkdownTextOptions {
 	/** Raw-file table width: 0 (default) = one pipe-aligned line per logical row (the logical /
