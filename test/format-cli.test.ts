@@ -95,6 +95,26 @@ describe('format-cli (compiled CLI, run as a subprocess)', () => {
 		expect(status).toBe(1);
 	});
 
+	it('by default, same-header tables do NOT share column widths', () => {
+		const doc = '| Name | Note |\n| --- | --- |\n| A | x |\n\n' + '| Name | Note |\n| --- | --- |\n| Alexandria | a longer note here |\n';
+		const file = tempFile(doc);
+		run([file]);
+		const out = readFileSync(file, 'utf8');
+		const tables = out.split('\n\n');
+		expect(tables[0].split('\n')[0]).not.toBe(tables[1].split('\n')[0]);
+		rmSync(file, { force: true });
+	});
+
+	it('--align-tables-width makes same-header tables share column widths', () => {
+		const doc = '| Name | Note |\n| --- | --- |\n| A | x |\n\n' + '| Name | Note |\n| --- | --- |\n| Alexandria | a longer note here |\n';
+		const file = tempFile(doc);
+		run([file, '--align-tables-width']);
+		const out = readFileSync(file, 'utf8');
+		const tables = out.split('\n\n');
+		expect(tables[0].split('\n')[0]).toBe(tables[1].split('\n')[0]);
+		rmSync(file, { force: true });
+	});
+
 	it('--check honours an explicit --width N — a general "formatted at this width" gate, not commit-only', () => {
 		const wide = '| Key | Description |\n| :-- | --- |\n| alpha | a fairly long description that certainly needs to wrap onto several continuation rows |\n';
 		const file = tempFile(wide);

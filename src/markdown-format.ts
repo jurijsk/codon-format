@@ -21,7 +21,7 @@
  * https://github.com/jurijsk/codon, which depends on this package). Codon's webview serializer
  * produces semantically-correct markdown; what the raw file LOOKS like is decided here, and only
  * here:
- *   - every Codon save is piped through formatMarkdownText() by Codon's host (markdownEditor.ts,
+ *   - every Codon save is piped through formatMarkdown() by Codon's host (markdownEditor.ts,
  *     imported directly — never spawned as a subprocess);
  *   - Codon's Format Document provider (markdownFormatter.ts) and this package's own CLI run the
  *     exact same function — so editor saves, Format Document, and the CLI all agree by
@@ -57,11 +57,15 @@ export { reflowLines } from './reflow.js';
 export { tightenListLines } from './list-tighten.js';
 export { splitTableRow, isDelimiterLine } from './tables.js';
 
-export interface FormatMarkdownTextOptions {
+export interface FormatMarkdownOptions {
 	/** Raw-file table width: 0 (default) = one pipe-aligned line per logical row (the logical /
 	 *  commit form); ≥40 = wrap cell text at whitespace onto continuation rows so table lines
 	 *  stay under this many characters. Values 1–39 are clamped up to 40. */
 	tableWidth?: number;
+	/** When `true`, tables with the same structure (exact header match — same labels, same order)
+	 *  anywhere in the document have their column widths aligned with each other, instead of each
+	 *  sizing to only its own content. Default `false`. */
+	alignTablesWidth?: boolean;
 }
 
 /**
@@ -69,29 +73,32 @@ export interface FormatMarkdownTextOptions {
  * dominant EOL, so callers pass `document.getText()` / file contents directly and write the
  * result back without EOL bookkeeping.
  */
-export function formatMarkdownText(content: string, options: FormatMarkdownTextOptions = {}): string {
+export function formatMarkdown(content: string, options: FormatMarkdownOptions = {}): string {
 	const raw = options.tableWidth ?? 0;
 	const tableWidth = raw <= 0 ? 0 : Math.max(raw, MIN_TABLE_WIDTH);
+	const alignTablesWidth = options.alignTablesWidth ?? false;
 	const lines = tightenListLines(reflowLines(content.split(/\r?\n/)));
 	const blocks = scanTables(lines);
 	// Tables with an EXACT header match (same labels, same order) share one set of column widths
 	// — computed from their rows combined — so the same column lines up at the same width across
 	// every occurrence (e.g. one table per doc section, repeating the same schema).
 	const groupWidths = new Map<ParsedTable, number[]>();
-	const groups = new Map<string, ParsedTable[]>();
-	for (const { table } of blocks) {
-		const key = tableHeaderKey(table);
-		const group = groups.get(key) ?? [];
-		group.push(table);
-		groups.set(key, group);
-	}
-	for (const tables of groups.values()) {
-		if (tables.length < 2) {
-			continue;
+	if (alignTablesWidth) {
+		const groups = new Map<string, ParsedTable[]>();
+		for (const { table } of blocks) {
+			const key = tableHeaderKey(table);
+			const group = groups.get(key) ?? [];
+			group.push(table);
+			groups.set(key, group);
 		}
-		const widths = computeGroupWidths(tables, tableWidth);
-		for (const table of tables) {
-			groupWidths.set(table, widths);
+		for (const tables of groups.values()) {
+			if (tables.length < 2) {
+				continue;
+			}
+			const widths = computeGroupWidths(tables, tableWidth);
+			for (const table of tables) {
+				groupWidths.set(table, widths);
+			}
 		}
 	}
 	const joined = emitTableLines(lines, blocks, (table, out) => emitTable(table, tableWidth, out, groupWidths.get(table))).join('\n');

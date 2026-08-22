@@ -21,12 +21,13 @@ Requires **Node >= 20.11**. The package is **ESM-only** (`"type": "module"`) —
 ## CLI
 
 ```
-npx codon-format <file.md ...> [--width 0|N>=40] [--check]
+npx codon-format <file.md ...> [--width 0|N>=40] [--check] [--align-tables-width]
 ```
 
 - **`--width 0`** (the default) — the logical/commit form: one pipe-aligned line per table row. **This is the only width safe to commit** — every other GFM renderer (GitHub included) only understands this form. Anything wider uses a raw-file-only continuation-row convention that only Codon's own reader collapses back losslessly; other renderers show it as broken, mostly-empty extra rows.
 - **`--width N`** (N ≥ 40) — wraps table cell text at whitespace onto continuation rows so no table line exceeds N characters. Useful for on-screen/raw-file readability while editing; format back at `--width 0` any time to losslessly collapse continuation rows to their logical form.
 - **`--check`** — reports without writing; exits 1 if any file isn't already canonical at the given width, 0 if every file is clean. A general "is this file formatted (at this width)" gate — pair it with `--width 0` (or omit `--width`) for a **commit-safety** gate in CI. A **local** pre-commit hook more often wants the default write mode instead (rewrite + re-stage, the way `prettier --write` works under lint-staged) rather than failing the commit outright.
+- **`--align-tables-width`** — by default, every table sizes to only its own content. Pass this flag to have tables with the same structure (exact header match) anywhere in the document share one set of column widths instead.
 
 Exits 1 on any file read/write error too. Each file keeps its own dominant line-ending style (LF/CRLF preserved, never converted).
 
@@ -53,16 +54,16 @@ npx codon-format $(git ls-files '*.md') --check
 ## Library
 
 ```ts
-import { formatMarkdownText } from '@jurijsk/codon-format';
+import { formatMarkdown } from '@jurijsk/codon-format';
 
-const formatted = formatMarkdownText(sourceText, { tableWidth: 0 });
+const formatted = formatMarkdown(sourceText, { tableWidth: 0 });
 ```
 
-`formatMarkdownText(content: string, options?: { tableWidth?: number }): string` — pure string→string, preserves the input's dominant EOL. `tableWidth` defaults to `0`.
+`formatMarkdown(content: string, options?: { tableWidth?: number; alignTablesWidth?: boolean }): string` — pure string→string, preserves the input's dominant EOL. `tableWidth` defaults to `0`. `alignTablesWidth` defaults to `false` — every table sizes to only its own content; set it to `true` to have tables sharing an exact header elsewhere in the document share one set of column widths instead.
 
 ## Relationship to the Codon VS Code extension
 
-[Codon](https://github.com/jurijsk/codon) depends on this package and runs the exact same `formatMarkdownText` for `Format Document`, `editor.formatOnSave`, and every save made through its WYSIWYG preview — so whatever this CLI produces is exactly what the editor would have written.
+[Codon](https://github.com/jurijsk/codon) depends on this package and runs the exact same `formatMarkdown` for `Format Document`, `editor.formatOnSave`, and every save made through its WYSIWYG preview — so whatever this CLI produces is exactly what the editor would have written.
 
 ## Development
 

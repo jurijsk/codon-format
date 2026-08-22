@@ -5,3 +5,4 @@ locus.json
 focus.json
 inject-*.cjs
 inject-*.js
+agent-server.json
