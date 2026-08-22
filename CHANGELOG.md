@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+- **BREAKING: renamed `formatMarkdownText` → `formatMarkdown` and `FormatMarkdownTextOptions` → `FormatMarkdownOptions`.** No back-compat alias — with only a couple of consumers of this package, the awkward `...Text` suffix wasn't worth carrying forward.
+- Added `alignTablesWidth` (default `false`) to `FormatMarkdownOptions`: set it to `true` to have tables with the same structure (exact header match) anywhere in the document share their column widths with each other, instead of each sizing to only its own content. See docs/design.md's "Cross-table width matching" section.
+- The CLI gained `--align-tables-width`, the same switch for `codon-format`.
+
 ## 0.3.0
 
 - **BREAKING: the package is now ESM-only** (`"type": "module"`). `import { formatMarkdownText } from '@jurijsk/codon-format'` is unchanged and keeps working; a CommonJS `require('@jurijsk/codon-format')` no longer does, except on Node >= 22.12, which supports `require()` of a synchronous ES module. That is a semver-major-flavored change, hence the minor bump on a 0.x line.

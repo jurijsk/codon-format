@@ -4,9 +4,9 @@
  * entirely — from a pre-commit hook, a CI step, a `tasks.json` task, or any other project's build.
  * Vscode-free, plain Node, no workspace dependency. Installed via this package's `bin` entry:
  *
- *     npx @jurijsk/codon-format <file.md ...> [--width N] [--check]
+ *     npx @jurijsk/codon-format <file.md ...> [--width N] [--check] [--align-tables-width]
  *     # or, once added as a project dependency:
- *     codon-format <file.md ...> [--width N] [--check]
+ *     codon-format <file.md ...> [--width N] [--check] [--align-tables-width]
  *
  * The `jurijsk.codon` VS Code extension depends on this package and runs the exact same function
  * for every Codon save and Format Document — so `codon-format` and the editor always agree.
@@ -25,6 +25,10 @@
  * default auto-fix-and-write form instead, re-staging whatever changed, the way `prettier --write`
  * under lint-staged does. Prints `formatted:` / `unchanged:` (or `would format:` under `--check`).
  *
+ * `--align-tables-width` opts in to aligning column widths across tables that share the same
+ * structure (exact header match) elsewhere in the document — otherwise each table sizes to only
+ * its own content, which is the default.
+ *
  * Whichever mode: `--width 0` (the default) is the only width safe to COMMIT. `codon.tableWidth`
  * (Ctrl+S / Format Document) legitimately wraps tables wide for on-screen reading, but only
  * Codon's own reader understands that wrapped continuation-row convention — every other GFM
@@ -34,11 +38,12 @@
  * caller here rather than rejecting the combination.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
-import { formatMarkdownText } from './markdown-format.js';
+import { formatMarkdown } from './markdown-format.js';
 
 const files: string[] = [];
 let width = 0;
 let check = false;
+let alignTablesWidth = false;
 
 const args = process.argv.slice(2);
 for (let index = 0; index < args.length; index += 1) {
@@ -61,6 +66,10 @@ for (let index = 0; index < args.length; index += 1) {
 		check = true;
 		continue;
 	}
+	if (value === '--align-tables-width') {
+		alignTablesWidth = true;
+		continue;
+	}
 	files.push(value);
 }
 
@@ -74,7 +83,9 @@ function parseWidth(value: string): number {
 }
 
 if (files.length === 0) {
-	console.error("Usage: codon-format <file.md ...> [--width 0|N>=40] [--check]   (rewrites files in place to Codon's canonical layout; --check reports without writing)");
+	console.error(
+		"Usage: codon-format <file.md ...> [--width 0|N>=40] [--check] [--align-tables-width]   (rewrites files in place to Codon's canonical layout; --check reports without writing; --align-tables-width makes same-structure tables share column widths)",
+	);
 	process.exit(1);
 }
 
@@ -83,7 +94,7 @@ let unformatted = false;
 for (const file of files) {
 	try {
 		const original = readFileSync(file, 'utf8');
-		const formatted = formatMarkdownText(original, { tableWidth: width });
+		const formatted = formatMarkdown(original, { tableWidth: width, alignTablesWidth });
 		if (formatted === original) {
 			console.log(`unchanged: ${file} (width=${width === 0 ? '0/logical' : width})`);
 			continue;
