@@ -14,7 +14,7 @@ Copilot auto-scopes files under `.github/instructions/` via each file's `applyTo
 
 ## Source layout
 
-The formatter is split by concern under `src/` — `tables.ts`, `frontmatter.ts`, `mdc.ts`, `fences.ts`, `reflow.ts`, `list-tighten.ts`, `eol.ts`, with `markdown-format.ts` as the orchestrator and `format-cli.ts` as the CLI entry point. `docs/design.md`'s file-layout table is the authoritative index — keep it in sync (and each file's own header comment) if you add, remove, or rename a source file.
+The formatter is split by concern under `src/` — `tables.ts`, `frontmatter.ts`, `mdc.ts`, `fences.ts`, `reflow.ts`, `list-tighten.ts`, `eol.ts`, `discover.ts`, with `markdown-format.ts` as the orchestrator and `format-cli.ts` as the CLI entry point. `docs/design.md`'s file-layout table is the authoritative index — keep it in sync (and each file's own header comment) if you add, remove, or rename a source file.
 
 ## After any code change
 

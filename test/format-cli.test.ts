@@ -5,8 +5,8 @@
  * standalone, vscode-free executable.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -23,14 +23,20 @@ function tempFile(content: string): string {
 	return file;
 }
 
-function run(args: string[]): { status: number; stdout: string; stderr: string } {
-	try {
-		const stdout = execFileSync('node', [CLI, ...args], { encoding: 'utf8' });
-		return { status: 0, stdout, stderr: '' };
-	} catch (e) {
-		const err = e as { status: number; stdout: string; stderr: string };
-		return { status: err.status, stdout: err.stdout, stderr: err.stderr };
-	}
+function tempDir(): string {
+	return mkdtempSync(join(tmpdir(), 'codon-cli-discover-test-'));
+}
+
+function run(args: string[], options: { cwd?: string } = {}): { status: number; stdout: string; stderr: string } {
+	// spawnSync (not execFileSync): needs both streams regardless of exit code — execFileSync
+	// discards stderr on a zero exit, which silently hides notices the CLI prints on success.
+	//
+	// cwd ALWAYS defaults to a fresh, empty temp dir — never this repo's own working directory.
+	// Bare `codon-format` (no file args, no discovery flag) now discovers and REWRITES every
+	// markdown file under cwd by default; a test that omitted an explicit cwd here once actually
+	// reformatted this repo's own samples/*.md as a side effect of running the test suite.
+	const result = spawnSync('node', [CLI, ...args], { encoding: 'utf8', cwd: options.cwd ?? tempDir() });
+	return { status: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
 }
 
 describe('format-cli (compiled CLI, run as a subprocess)', () => {
@@ -90,9 +96,15 @@ describe('format-cli (compiled CLI, run as a subprocess)', () => {
 		expect(stdout).not.toContain('formatted:');
 	});
 
-	it('with no file args, prints usage and exits 1', () => {
-		const { status } = run([]);
-		expect(status).toBe(1);
+	it('with no file args and no discovery flag, defaults to --git-driven from cwd', () => {
+		const cwd = tempDir();
+		writeFileSync(join(cwd, 'a.md'), UNFORMATTED);
+		const { status, stdout, stderr } = run([], { cwd });
+		expect(status).toBe(0);
+		expect(stderr).toContain('defaulting to --git-driven');
+		expect(stdout).toContain('formatted:');
+		expect(readFileSync(join(cwd, 'a.md'), 'utf8')).toBe(CANONICAL);
+		rmSync(cwd, { recursive: true, force: true });
 	});
 
 	it('by default, same-header tables do NOT share column widths', () => {
@@ -130,5 +142,81 @@ describe('format-cli (compiled CLI, run as a subprocess)', () => {
 		expect(atCommitWidth.status).toBe(1);
 		expect(atCommitWidth.stdout).toContain('would format:');
 		rmSync(file, { force: true });
+	});
+
+	describe('--git-driven / --all (project-wide discovery)', () => {
+		it('--all formats every matching file under --root, skipping node_modules by default', () => {
+			const root = tempDir();
+			mkdirSync(join(root, 'docs'), { recursive: true });
+			mkdirSync(join(root, 'node_modules'), { recursive: true });
+			writeFileSync(join(root, 'docs', 'a.md'), UNFORMATTED);
+			writeFileSync(join(root, 'node_modules', 'b.md'), UNFORMATTED);
+
+			const { status, stdout } = run(['--all', '--root', root]);
+			expect(status).toBe(0);
+			expect(stdout).toContain(join(root, 'docs', 'a.md'));
+			expect(stdout).not.toContain(join(root, 'node_modules', 'b.md'));
+			expect(readFileSync(join(root, 'docs', 'a.md'), 'utf8')).toBe(CANONICAL);
+			rmSync(root, { recursive: true, force: true });
+		});
+
+		it('--git-driven falls back to --all with a stderr notice when --root is not a git working tree', () => {
+			const root = tempDir();
+			writeFileSync(join(root, 'a.md'), UNFORMATTED);
+
+			const { status, stdout, stderr } = run(['--git-driven', '--root', root]);
+			expect(status).toBe(0);
+			expect(stderr).toContain('not a git working tree');
+			expect(stdout).toContain(join(root, 'a.md'));
+			rmSync(root, { recursive: true, force: true });
+		});
+
+		it('--git-driven respects .gitignore inside a real git working tree', () => {
+			const root = tempDir();
+			execFileSync('git', ['init', '--quiet'], { cwd: root });
+			writeFileSync(join(root, '.gitignore'), 'ignored.md\n');
+			writeFileSync(join(root, 'a.md'), UNFORMATTED);
+			writeFileSync(join(root, 'ignored.md'), UNFORMATTED);
+
+			const { stdout } = run(['--git-driven', '--root', root]);
+			expect(stdout).toContain(join(root, 'a.md'));
+			expect(stdout).not.toContain(join(root, 'ignored.md'));
+			rmSync(root, { recursive: true, force: true });
+		});
+
+		it('--ignore adds an exclusion on top of the defaults, without replacing them', () => {
+			const root = tempDir();
+			mkdirSync(join(root, 'output'), { recursive: true });
+			mkdirSync(join(root, 'node_modules'), { recursive: true });
+			writeFileSync(join(root, 'output', 'a.md'), UNFORMATTED);
+			writeFileSync(join(root, 'node_modules', 'b.md'), UNFORMATTED);
+
+			const { stdout } = run(['--all', '--root', root, '--ignore', 'output']);
+			expect(stdout).not.toContain(join(root, 'output', 'a.md'));
+			expect(stdout).not.toContain(join(root, 'node_modules', 'b.md'));
+			rmSync(root, { recursive: true, force: true });
+		});
+
+		it('--git-driven and --all are mutually exclusive', () => {
+			const { status, stderr } = run(['--git-driven', '--all']);
+			expect(status).toBe(1);
+			expect(stderr).toContain('mutually exclusive');
+		});
+
+		it('a discovery flag combined with an explicit file path is an error', () => {
+			const file = tempFile(UNFORMATTED);
+			const { status, stderr } = run(['--all', file]);
+			expect(status).toBe(1);
+			expect(stderr).toContain('mutually exclusive');
+			rmSync(file, { force: true });
+		});
+
+		it('exits 0 (not the usage error) when discovery finds zero matching files', () => {
+			const root = tempDir();
+			const { status, stdout } = run(['--all', '--root', root]);
+			expect(status).toBe(0);
+			expect(stdout).toContain('no markdown files found');
+			rmSync(root, { recursive: true, force: true });
+		});
 	});
 });

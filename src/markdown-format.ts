@@ -9,6 +9,8 @@
  *   - reflow.ts       — paragraph/list-item reflow (one line each)
  *   - list-tighten.ts — dropping blank lines between simple list items
  *   - tables.ts       — the GFM table engine: parsing, column widths, wrapping, emission
+ *   - discover.ts     — project-wide markdown file discovery (`discoverMarkdownFiles`, and the
+ *                       CLI's `--git-driven`/`--all`)
  *
  * See ../docs/design.md for the full design writeup (why each decision, not just what it does).
  *
@@ -56,6 +58,7 @@ export { computeMdcBlockLines } from './mdc.js';
 export { reflowLines } from './reflow.js';
 export { tightenListLines } from './list-tighten.js';
 export { splitTableRow, isDelimiterLine } from './tables.js';
+export { discoverMarkdownFiles, type DiscoverMarkdownFilesOptions, type DiscoveryMode } from './discover.js';
 
 export interface FormatMarkdownOptions {
 	/** Raw-file table width: 0 (default) = one pipe-aligned line per logical row (the logical /

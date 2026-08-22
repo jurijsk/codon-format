@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0
+
+- Added project-wide file discovery: the CLI's `--git-driven` (default — delegates to `git ls-files`, respects `.gitignore`, falls back to `--all`'s behavior with a stderr notice outside a git working tree or without `git` installed) and `--all` (a plain filesystem walk that never touches git), both mutually exclusive with each other and with explicit file arguments; `--root <dir>` and repeatable `--ignore <pattern>` (always merged with the two defaults, `.git`/`node_modules`, which can't be removed). Same discovery exposed as a new library export, `discoverMarkdownFiles({ root?, mode?, ignore? }): string[]` — paths only, no bundled formatting, alongside `formatMarkdown`. New module: `src/discover.ts`. See docs/design.md's "Project-wide discovery" section and docs/project-wide-discovery-spec.md for the full design writeup.
+- **BREAKING: bare `codon-format` (no file arguments, no discovery flag) now runs `--git-driven` from cwd instead of printing a usage error and exiting 1.** A script relying on the old "no args = error" behavior needs updating.
+
 ## 0.4.0
 
 - **BREAKING: renamed `formatMarkdownText` → `formatMarkdown` and `FormatMarkdownTextOptions` → `FormatMarkdownOptions`.** No back-compat alias — with only a couple of consumers of this package, the awkward `...Text` suffix wasn't worth carrying forward.
