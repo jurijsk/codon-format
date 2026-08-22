@@ -6,16 +6,17 @@ This is the design writeup behind the formatter's source — the *what* lives in
 
 The formatter is split by concern, not left as one large file — the file you want is usually the answer to "where does X happen":
 
-| File                 | Answers                                                                                                                                                                                                  |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File                 | Answers                                                                                                                                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `markdown-format.ts` | The orchestrator — `formatMarkdown`/`tablesToLogicalRows`, wiring the passes below into the one function Codon and the CLI call. Read this file first; it's the pipeline's shape, not its internals. |
-| `frontmatter.ts`     | Where do we detect YAML frontmatter?                                                                                                                                                                     |
-| `mdc.ts`             | Where do we detect MDC block components (`::name … ::`)?                                                                                                                                                 |
-| `fences.ts`          | Where do we detect fenced code blocks and multi-line HTML comments — the shared fence-toggle mdc.ts, tables.ts, and list-tighten.ts all key off, instead of each keeping its own copy?                   |
-| `reflow.ts`          | Where do we join wrapped paragraphs/list items onto one line?                                                                                                                                            |
-| `list-tighten.ts`    | Where do we drop blank lines between simple list items?                                                                                                                                                  |
-| `tables.ts`          | Where do we format tables — parsing, column widths, wrapping, cross-table matching, emission?                                                                                                            |
-| `eol.ts`             | Where do we detect/normalize line endings?                                                                                                                                                               |
+| `frontmatter.ts`     | Where do we detect YAML frontmatter?                                                                                                                                                                 |
+| `mdc.ts`             | Where do we detect MDC block components (`::name … ::`)?                                                                                                                                             |
+| `fences.ts`          | Where do we detect fenced code blocks and multi-line HTML comments — the shared fence-toggle mdc.ts, tables.ts, and list-tighten.ts all key off, instead of each keeping its own copy?               |
+| `reflow.ts`          | Where do we join wrapped paragraphs/list items onto one line?                                                                                                                                        |
+| `list-tighten.ts`    | Where do we drop blank lines between simple list items?                                                                                                                                              |
+| `tables.ts`          | Where do we format tables — parsing, column widths, wrapping, cross-table matching, emission?                                                                                                        |
+| `eol.ts`             | Where do we detect/normalize line endings?                                                                                                                                                           |
+| `discover.ts`        | Where do we find project-wide markdown files (`discoverMarkdownFiles`, the CLI's `--git-driven`/`--all`)?                                                                                            |
 
 `frontmatter.ts`, `mdc.ts`, and `fences.ts` exist for **detection only** — `reflow.ts`, `list-tighten.ts`, and `tables.ts` each call into them to find out which lines to leave completely alone, rather than duplicating that detection logic. `fences.ts` is the newest of the three (see the pitfall below for why it had to stop being duplicated).
 
@@ -66,6 +67,12 @@ This exists because a document with several tables sharing a schema (one per sec
   git add $files
   ```
   `--check` in a *local* hook just means "fail the commit and make the human re-run the formatter themselves" — usually not what you want for pure formatting.
+
+### Project-wide discovery: `--git-driven`/`--all`
+
+Two mutually exclusive flags trigger discovery instead of formatting the positional file arguments: `--git-driven` (delegates to `git ls-files`, so it respects `.gitignore`; falls back to `--all`'s behavior, with a stderr notice, when `--root` isn't a git working tree or `git` isn't installed) and `--all` (an explicit opt-in plain filesystem walk that never touches git and ignores `.gitignore` entirely). `--root <dir>` sets the discovery root (default cwd); `--ignore <pattern>` (repeatable) adds exclusions on top of the two defaults (`.git`, `node_modules`), which are always merged in and can never be removed. With no file arguments and neither discovery flag, the CLI defaults to `--git-driven` from cwd rather than erroring. The same discovery is exposed programmatically as `discoverMarkdownFiles` (paths only, no bundled formatting) for a consumer like `jurijsk/codon` that imports the formatter directly rather than shelling out to the CLI.
+
+Implementation lives in `discover.ts`; the full design writeup is in [docs/project-wide-discovery-spec.md](./project-wide-discovery-spec.md).
 
 ## Known pitfall: watch for control bytes silently introduced by editing tools
 

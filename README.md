@@ -21,19 +21,42 @@ Requires **Node >= 20.11**. The package is **ESM-only** (`"type": "module"`) —
 ## CLI
 
 ```
-npx codon-format <file.md ...> [--width 0|N>=40] [--check] [--align-tables-width]
+npx codon-format [<file.md ...>] [--git-driven|--all] [--root <dir>] [--ignore <pattern>]... [--width 0|N>=40] [--check] [--align-tables-width]
 ```
 
-- **`--width 0`** (the default) — the logical/commit form: one pipe-aligned line per table row. **This is the only width safe to commit** — every other GFM renderer (GitHub included) only understands this form. Anything wider uses a raw-file-only continuation-row convention that only Codon's own reader collapses back losslessly; other renderers show it as broken, mostly-empty extra rows.
-- **`--width N`** (N ≥ 40) — wraps table cell text at whitespace onto continuation rows so no table line exceeds N characters. Useful for on-screen/raw-file readability while editing; format back at `--width 0` any time to losslessly collapse continuation rows to their logical form.
-- **`--check`** — reports without writing; exits 1 if any file isn't already canonical at the given width, 0 if every file is clean. A general "is this file formatted (at this width)" gate — pair it with `--width 0` (or omit `--width`) for a **commit-safety** gate in CI. A **local** pre-commit hook more often wants the default write mode instead (rewrite + re-stage, the way `prettier --write` works under lint-staged) rather than failing the commit outright.
-- **`--align-tables-width`** — by default, every table sizes to only its own content. Pass this flag to have tables with the same structure (exact header match) anywhere in the document share one set of column widths instead.
+Exactly one of three things decides *which* files get formatted: explicit file paths, `--git-driven`, or `--all` — passing more than one of the three is an error. With none of the three given, `codon-format` defaults to `--git-driven` from cwd (see the first use case below).
 
-Exits 1 on any file read/write error too. Each file keeps its own dominant line-ending style (LF/CRLF preserved, never converted).
+### Use cases
+
+| I want to...                                          | Run                                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Format every markdown file in the current project     | `codon-format`                                                                  |
+| Format one specific file                              | `codon-format docs/readme.md`                                                   |
+| Format several specific files                         | `codon-format docs/a.md docs/b.md`                                              |
+| Format everything, ignoring `.gitignore` entirely     | `codon-format --all`                                                            |
+| Format a different project without `cd`-ing there     | `codon-format --root ../other-project`                                          |
+| Skip a directory `.gitignore` doesn't cover           | `codon-format --ignore fixtures`                                                |
+| Check formatting in CI without writing                | `codon-format --check`                                                          |
+| Format only files staged for commit (pre-commit hook) | see the [pre-commit example](#example-pre-commit-hook-auto-fix--re-stage) below |
+
+### Parameters
+
+| Flag                   | Default                           | Notes                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<file.md ...>`        | —                                 | Explicit file paths. Mutually exclusive with `--git-driven`/`--all`.                                                                                                                                                                                                                                                                                                  |
+| `--git-driven`         | on, if nothing else selects files | Delegates to `git ls-files`, respecting `.gitignore`. Outside a git working tree (or without `git` installed), falls back to `--all`'s behavior with a stderr notice instead of erroring.                                                                                                                                                                             |
+| `--all`                | off                               | A plain filesystem walk that never touches git and ignores `.gitignore` entirely.                                                                                                                                                                                                                                                                                     |
+| `--root <dir>`         | cwd                               | Discovery root for `--git-driven`/`--all`.                                                                                                                                                                                                                                                                                                                            |
+| `--ignore <pattern>`   | `[]`                              | Repeatable. Merged with the two always-on defaults (`.git`, `node_modules`), never replacing them.                                                                                                                                                                                                                                                                    |
+| `--width 0\|N>=40`     | `0`                               | `0` is the logical/commit form: one pipe-aligned line per table row — **the only width safe to commit**, since every other GFM renderer only understands this form. `N ≥ 40` wraps table cell text onto continuation rows so no table line exceeds N characters, for on-screen/raw-file readability; format back at `--width 0` any time to losslessly collapse them. |
+| `--check`              | `false`                           | Reports without writing; exits 1 if any file isn't already canonical at the given width. Pair with the default width for a commit-safety gate in CI.                                                                                                                                                                                                                  |
+| `--align-tables-width` | `false`                           | Have tables with the same structure (exact header match) elsewhere in the document share one set of column widths, instead of each sizing to only its own content.                                                                                                                                                                                                    |
+
+Exits 1 on any file read/write error too. Each file keeps its own dominant line-ending style (LF/CRLF preserved, never converted). See [docs/design.md](docs/design.md) and [docs/project-wide-discovery-spec.md](docs/project-wide-discovery-spec.md) for the full discovery design.
 
 ### Example: pre-commit hook (auto-fix + re-stage)
 
-No `--width` flag below — it defaults to `0`, the only width safe to commit:
+Explicit file paths, not `--git-driven`/`--all`, since only the staged subset should be touched:
 
 ```bash
 #!/usr/bin/env sh
@@ -45,10 +68,8 @@ git add $files
 
 ### Example: CI gate
 
-Again, no `--width` flag — `--check` alone gates on the default (`0`):
-
 ```bash
-npx codon-format $(git ls-files '*.md') --check
+npx codon-format --check
 ```
 
 ## Library
@@ -61,13 +82,22 @@ const formatted = formatMarkdown(sourceText, { tableWidth: 0 });
 
 `formatMarkdown(content: string, options?: { tableWidth?: number; alignTablesWidth?: boolean }): string` — pure string→string, preserves the input's dominant EOL. `tableWidth` defaults to `0`. `alignTablesWidth` defaults to `false` — every table sizes to only its own content; set it to `true` to have tables sharing an exact header elsewhere in the document share one set of column widths instead.
 
+```ts
+import { discoverMarkdownFiles } from '@jurijsk/codon-format';
+
+const files = discoverMarkdownFiles({ root: '.', mode: 'git-driven' });
+// -> ['README.md', 'docs/design.md', ...] — root-relative paths, no formatting side effects
+```
+
+`discoverMarkdownFiles(options?: { root?: string; mode?: 'git-driven' | 'all'; ignore?: string[] }): string[]` — the same discovery the CLI's `--git-driven`/`--all` use, as a plain function: paths only, so a caller can inspect or discard some of them before formatting the rest (`formatMarkdown` on each path is left entirely to the caller). `mode` defaults to `'git-driven'`, including its fallback-to-`'all'` behavior outside a git working tree.
+
 ## Relationship to the Codon VS Code extension
 
 [Codon](https://github.com/jurijsk/codon) depends on this package and runs the exact same `formatMarkdown` for `Format Document`, `editor.formatOnSave`, and every save made through its WYSIWYG preview — so whatever this CLI produces is exactly what the editor would have written.
 
 ## Development
 
-The source is split by concern (`src/tables.ts`, `src/frontmatter.ts`, `src/mdc.ts`, `src/fences.ts`, `src/reflow.ts`, `src/list-tighten.ts`, `src/eol.ts`, with `src/markdown-format.ts` as the orchestrator) — see [docs/design.md](docs/design.md) for the full writeup: the *why* behind the table engine's width regimes, cross-table matching, the CLI's `--check` semantics, and known pitfalls.
+The source is split by concern (`src/tables.ts`, `src/frontmatter.ts`, `src/mdc.ts`, `src/fences.ts`, `src/reflow.ts`, `src/list-tighten.ts`, `src/eol.ts`, `src/discover.ts`, with `src/markdown-format.ts` as the orchestrator) — see [docs/design.md](docs/design.md) for the full writeup: the *why* behind the table engine's width regimes, cross-table matching, the CLI's `--check` semantics, project-wide discovery, and known pitfalls.
 
 ## License
 
