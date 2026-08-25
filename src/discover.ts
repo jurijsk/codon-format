@@ -5,7 +5,7 @@
  * See ../docs/project-wide-discovery-spec.md for the full design writeup.
  */
 import { spawnSync } from 'node:child_process';
-import { readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 /** The three extensions this ecosystem treats as Codon's domain. */
@@ -70,7 +70,9 @@ export function discoverGitDriven(root: string, ignore: string[]): string[] | nu
 	if (result.error || result.status !== 0) {
 		return null;
 	}
-	return result.stdout.split('\0').filter((entry) => entry.length > 0);
+	// `--cached` reports index entries even when the worktree file is gone (deleted but the
+	// deletion not yet staged) — such a path has nothing to format and would only ENOENT.
+	return result.stdout.split('\0').filter((entry) => entry.length > 0 && existsSync(join(root, entry)));
 }
 
 /**
@@ -105,14 +107,22 @@ function walk(root: string, dir: string, ignore: string[], out: string[]): void 
  * directory/file-name exclusion, e.g. `output`, `tmp`, `node_modules`). A pattern with a `/`
  * matches if the path, or any suffix of the path starting at a segment boundary, equals the
  * pattern or continues past it at another segment boundary (a multi-segment prefix exclusion,
- * e.g. `.meta/debug` — matching `.meta/debug/x.md` but not `.meta/debugger/x.md`). A single
- * trailing `/` on a pattern (the common gitignore directory-only convention) is stripped first.
+ * e.g. `.meta/debug` — matching `.meta/debug/x.md` but not `.meta/debugger/x.md`). A pattern
+ * starting `*.` is a FILENAME-SUFFIX exclusion (`*.md.md` matches any file ending `.md.md`) —
+ * the one wildcard form supported; there is still no general glob dialect. A single trailing `/`
+ * on a pattern (the common gitignore directory-only convention) is stripped first.
  */
 export function matchesIgnore(relPath: string, patterns: string[]): boolean {
 	const segments = relPath.split('/');
 	for (const raw of patterns) {
 		const pattern = raw.endsWith('/') ? raw.slice(0, -1) : raw;
 		if (pattern.length === 0) {
+			continue;
+		}
+		if (pattern.startsWith('*.')) {
+			if (segments[segments.length - 1].endsWith(pattern.slice(1))) {
+				return true;
+			}
 			continue;
 		}
 		if (!pattern.includes('/')) {

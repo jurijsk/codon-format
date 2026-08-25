@@ -255,6 +255,84 @@ describe('table width fitting (codon.tableWidth / --width) and the logical form'
 	});
 });
 
+describe('sparse rows (GFM row-spanning-note convention — no real colspan in pipe tables)', () => {
+	const commentSrc =
+		'| Component | Value | Flag |\n| --- | --- | --- |\n| Neutrophil % | 27.4 | L |\n| Comment: a note that spans the whole row |\n| Lymphocyte % | 52.6 | H |\n';
+
+	it('a row with fewer cells than the header keeps its own cell count instead of being padded', () => {
+		const out = formatMarkdown(commentSrc);
+		const commentLine = out.trimEnd().split('\n').find((line) => line.includes('Comment:'));
+		expect(commentLine).toBe('| Comment: a note that spans the whole row |');
+	});
+
+	it("a sparse row wraps at the table's full width when it's longer than the target, not confined to one column", () => {
+		const longNote = 'Comment: ' + 'word '.repeat(20).trim();
+		const src = `| Component | Value | Flag |\n| --- | --- | --- |\n| Neutrophil % | 27.4 | L |\n| ${longNote} |\n| Lymphocyte % | 52.6 | H |\n`;
+		const out = formatMarkdown(src, { tableWidth: 44 });
+		const lines = out.trimEnd().split('\n');
+		expect(lines.every((l) => l.length <= 44)).toBe(true); // wrapped to fit, not left overflowing
+		expect(lines.some((l) => l.startsWith('| Comment:'))).toBe(true); // wraps as its own one-cell rows, still starting mid-sentence
+		expect(new Set(lines.map((l) => l.length)).size).toBe(1); // every wrapped piece still pads out — pipes stay aligned with the rest of the table
+		// Folds back into the exact original sentence when collapsed at width 0.
+		expect(formatMarkdown(out, { tableWidth: 0 })).toContain(`| ${longNote} |`);
+	});
+
+	it('when tableWidth leaves enough headroom, a sparse row renders on ONE line instead of wrapping unnecessarily tighter than it has to', () => {
+		const note = 'Comment: a moderately long note that needs some room but still fits easily';
+		const src = `| Component | Value | Flag |\n| --- | --- | --- |\n| Neutrophil % | 27.4 | L |\n| ${note} |\n| Lymphocyte % | 52.6 | H |\n`;
+		const out = formatMarkdown(src, { tableWidth: 100 }); // generous cap: bigger than the note needs, not just bigger than the natural table
+		const lines = out.trimEnd().split('\n');
+		expect(lines.filter((l) => l.includes('Comment:')).length).toBe(1); // one line, not wrapped
+		expect(lines.every((l) => l.length <= 100)).toBe(true);
+		expect(new Set(lines.map((l) => l.length)).size).toBe(1); // real columns widened to meet it, not left mismatched
+	});
+
+	it("a sparse row widens the real columns evenly so every row's trailing pipe still lines up", () => {
+		const out = formatMarkdown(commentSrc);
+		const lines = out.trimEnd().split('\n');
+		expect(new Set(lines.map((l) => l.length)).size).toBe(1); // one shared line length, incl. the sparse row
+		expect(lines[0]).toBe('| Component         | Value     | Flag     |');
+		expect(lines[2]).toBe('| Neutrophil %      | 27.4      | L        |');
+	});
+
+	it("a sparse row narrower than the table just pads out to match, real columns untouched", () => {
+		const out = formatMarkdown('| Component | Value | Flag |\n| --- | --- | --- |\n| Neutrophil % | 27.4 | L |\n| N/A |\n| Lymphocyte % | 52.6 | H |\n');
+		const lines = out.trimEnd().split('\n');
+		expect(new Set(lines.map((l) => l.length)).size).toBe(1);
+		expect(lines[0]).toBe('| Component    | Value | Flag |'); // unwidened — the comment is the short one here
+		expect(lines[3]).toBe('| N/A                         |');
+	});
+
+	it('at a nonzero tableWidth, a long sparse row wraps to fit instead of widening the real columns past the target', () => {
+		const longNote = 'Comment: ' + 'word '.repeat(30).trim(); // far longer than any fitted table at width 44
+		const src = `| Component | Value | Flag |\n| --- | --- | --- |\n| Neutrophil % | 27.4 | L |\n| ${longNote} |\n| Lymphocyte % | 52.6 | H |\n`;
+		const out = formatMarkdown(src, { tableWidth: 44 });
+		const lines = out.trimEnd().split('\n');
+		expect(lines.every((l) => l.length <= 44)).toBe(true); // nothing — real rows or the sparse row's wrapped pieces — exceeds the target
+		expect(formatMarkdown(out, { tableWidth: 0 })).toContain(`| ${longNote} |`); // still one sentence once collapsed
+	});
+
+	it('wrap (width N) → collapse (width 0) round-trips a sparse row losslessly', () => {
+		const atZero = formatMarkdown(commentSrc, { tableWidth: 0 });
+		const atWidth = formatMarkdown(commentSrc, { tableWidth: 44 });
+		expect(formatMarkdown(atWidth, { tableWidth: 0 })).toBe(atZero);
+	});
+
+	it('a sparse row long enough to wrap folds back into exactly one row at width 0, not phantom extras', () => {
+		const longNote = 'Comment: ' + 'word '.repeat(30).trim();
+		const src = `| Component | Value | Flag |\n| --- | --- | --- |\n| Neutrophil % | 27.4 | L |\n| ${longNote} |\n| Lymphocyte % | 52.6 | H |\n`;
+		const atWidth = formatMarkdown(src, { tableWidth: 44 });
+		const atZero = formatMarkdown(src, { tableWidth: 0 });
+		expect(atWidth.trimEnd().split('\n').length).toBeGreaterThan(atZero.trimEnd().split('\n').length); // it did actually wrap into more physical lines
+		expect(formatMarkdown(atWidth, { tableWidth: 0 })).toBe(atZero); // and they fold straight back
+	});
+
+	it('format(format(x)) === format(x) for a sparse row at a set width', () => {
+		const once = formatMarkdown(commentSrc, { tableWidth: 44 });
+		expect(formatMarkdown(once, { tableWidth: 44 })).toBe(once);
+	});
+});
+
 describe('cross-table width matching (tables with an identical header share column widths)', () => {
 	it('by default, a narrow table and a wide table with the same header each size to their own content', () => {
 		const doc = '| Name | Note |\n| --- | --- |\n| A | x |\n\n' + '| Name | Note |\n| --- | --- |\n| Alexandria | a longer note here |\n';

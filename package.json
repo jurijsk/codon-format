@@ -45,6 +45,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "^22.19.19",
+		"oxfmt": "^0.64.0",
 		"typescript": "^5.9.2",
 		"vitest": "^4.1.6"
 	}

@@ -57,7 +57,11 @@ export { computeYamlMetadataBlockLines } from './frontmatter.js';
 export { computeMdcBlockLines } from './mdc.js';
 export { reflowLines } from './reflow.js';
 export { tightenListLines } from './list-tighten.js';
-export { splitTableRow, isDelimiterLine } from './tables.js';
+// The table engine itself is public API: a caller that BUILDS tables (rather than reformatting a
+// whole document) can size and emit them with the exact width logic formatMarkdown uses — e.g.
+// DAINA's converter pipe-aligns the tables inside its page fences (which formatMarkdown, fence-
+// protected by design, would never reach) with computeColumnWidths at width 0.
+export { splitTableRow, isDelimiterLine, computeColumnWidths, emitTable, emitLogicalTable, scanTables, emitTableLines, transformTableLines, tableHeaderKey, computeGroupWidths, type ParsedTable, type TableBlock, type ColumnAlign } from './tables.js';
 export { discoverMarkdownFiles, type DiscoverMarkdownFilesOptions, type DiscoveryMode } from './discover.js';
 
 export interface FormatMarkdownOptions {

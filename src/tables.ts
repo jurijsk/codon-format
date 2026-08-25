@@ -2,9 +2,14 @@
  * tables.ts — the GFM table engine: parsing table blocks out of raw lines, computing column
  * widths (plain pipe-aligned at width 0, or water-style set-width fitting with wrapped
  * continuation rows), and re-emitting them. Adapted from the water project's format-markdown
- * scripts, with two deliberate upgrades: column ALIGNMENT (`:---` / `:---:` / `---:`) is
- * preserved (water always writes plain dashes), and ragged rows pad out to the widest row instead
- * of losing cells. See ../docs/design.md for the width-regime and cross-table-matching rationale.
+ * scripts, with two deliberate upgrades: column ALIGNMENT (`:---` / `:---:` / `---:`) is preserved
+ * (water always writes plain dashes), and a row with MORE cells than the header pads every row out
+ * to the widest instead of losing cells. A row with FEWER cells than the header (GFM's own
+ * row-spanning-note convention — no real colspan exists in pipe tables) goes the other way: it
+ * keeps its true, smaller cell count rather than being padded, and — when wrapped — does so at
+ * the table's full width rather than one column's share of it, since it isn't really "in" any one
+ * column to begin with. See emitTable/scanTables. See ../docs/design.md for the width-regime and
+ * cross-table-matching rationale.
  */
 import { computeMdcBlockLines } from './mdc.js';
 import { computeFenceProtectedLines } from './fences.js';
@@ -38,7 +43,7 @@ const MIN_COLUMN_WIDTH = 3;
 /** The narrowest meaningful set width — below this the shrink loop can't do useful work. */
 export const MIN_TABLE_WIDTH = 40;
 
-type ColumnAlign = 'left' | 'center' | 'right' | null;
+export type ColumnAlign = 'left' | 'center' | 'right' | null;
 
 function delimiterAlignOf(cell: string): ColumnAlign {
 	const c = cell.replace(/\s+/g, '');
@@ -84,26 +89,41 @@ function minimalDelimiter(align: ColumnAlign): string {
 }
 
 /**
- * Merge continuation rows back into their logical rows (water's inverse-wrap): a row whose
- * FIRST cell is empty while any other cell has text is the wrapped tail of the row above —
- * its cell text joins the corresponding cell with a space. A continuation directly under the
- * header stays (there is no data row to join). This runs before ALL other table work, so a
- * file written at any width normalizes losslessly back to logical rows.
+ * Merge continuation rows back into their logical rows (water's inverse-wrap). Two shapes qualify,
+ * both gated on `collapsed.length > 1` — a continuation directly under the header stays (there is
+ * no data row above to join):
+ *
+ * - A FULL-arity row (as many cells as the table's column count) whose FIRST cell is empty while
+ *   any other cell has text is the wrapped tail of a FULL row above — its cell text joins the
+ *   corresponding cell with a space.
+ * - A SPARSE row (fewer cells than the column count — GFM's row-spanning-note convention, e.g. a
+ *   `| Comment: … |` row under a 5-column header) whose cell count matches the row directly above
+ *   it (also sparse) is the wrapped tail of THAT sparse row — emitTable wraps a sparse row's own
+ *   content at the table's full width when `tableWidth` is nonzero, and every piece keeps the
+ *   original's cell count, so two sparse rows in a row are always parts of the same logical row
+ *   split apart by wrapping. (Two genuinely independent adjacent sparse rows of the same arity —
+ *   an unusual thing to author — get merged into one under this rule too; see design.md.)
+ *
+ * A full row's continuation can never land on a sparse row or vice versa (unmatched arity), which
+ * is what keeps this safe — see the pitfall this fixed in ../docs/design.md. This runs before ALL
+ * other table work, so a file written at any width normalizes losslessly back to logical rows.
  */
 function collapseContinuationRows(rows: string[][]): string[][] {
 	if (rows.length <= 2) {
 		return rows;
 	}
+	const cols = Math.max(...rows.map((row) => row.length));
 	const collapsed: string[][] = [rows[0]];
 	for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
 		const row = rows[rowIndex].slice();
-		const firstCellEmpty = row[0].trim().length === 0;
-		const hasAnyOtherText = row.slice(1).some((cell) => cell.trim().length > 0);
-		if (!firstCellEmpty || !hasAnyOtherText || collapsed.length === 1) {
+		const previous = collapsed[collapsed.length - 1];
+		const fullContinuation =
+			row.length === cols && previous.length === cols && row[0].trim().length === 0 && row.slice(1).some((cell) => cell.trim().length > 0);
+		const sparseContinuation = row.length < cols && row.length === previous.length;
+		if (collapsed.length === 1 || (!fullContinuation && !sparseContinuation)) {
 			collapsed.push(row);
 			continue;
 		}
-		const previous = collapsed[collapsed.length - 1];
 		for (let col = 0; col < row.length; col += 1) {
 			const continuation = row[col].trim();
 			if (!continuation) {
@@ -129,7 +149,7 @@ function totalLineLength(widths: number[], indentLength: number): number {
  * the table settles at the minimal achievable width above the target: wider than asked, every
  * word intact.
  */
-function computeColumnWidths(rows: string[][], cols: number, maxLineLength: number, indentLength: number): number[] {
+export function computeColumnWidths(rows: string[][], cols: number, maxLineLength: number, indentLength: number): number[] {
 	const widths: number[] = [];
 	const floors: number[] = [];
 	for (let col = 0; col < cols; col += 1) {
@@ -218,9 +238,34 @@ export function tableHeaderKey(table: ParsedTable): string {
  *  column lines up at the same width across every occurrence (e.g. one table per doc section,
  *  repeating the same columns). Callers only invoke this for groups of 2+ tables. */
 export function computeGroupWidths(tables: ParsedTable[], tableWidth: number): number[] {
-	const mergedRows = [tables[0].rows[0], ...tables.flatMap((table) => table.rows.slice(1))];
+	const mergedRows = [tables[0].rows[0], ...tables.flatMap((table) => table.rows.slice(1).filter((row) => row.length === table.cols))];
 	const indentLength = Math.max(...tables.map((table) => table.indent.length));
 	return computeColumnWidths(mergedRows, tables[0].cols, tableWidth, indentLength);
+}
+
+/** If a sparse row's own content needs more horizontal room than the real columns currently add
+ *  up to, grow those columns (evenly, remainder to the first ones) so every row's trailing pipe
+ *  still lines up down the page — up to `cap` (the table's total rendered width, "| ... |"
+ *  included; `Infinity` at width 0, where alignment always wins unconditionally, see design.md's
+ *  "alignment always wins"). At a nonzero tableWidth, `cap` is that width: real columns widen to
+ *  close as much of the gap as fits within it, but never past it just for a sparse row's sake —
+ *  emitTable's own sparse-row wrapping (see emitSparse) takes over for whatever doesn't fit. */
+function widenForSparseRows(widths: number[], rows: string[][], cols: number, indentLength: number, cap: number): number[] {
+	const sparseRows = rows.filter((row) => row.length < cols);
+	if (sparseRows.length === 0) {
+		return widths;
+	}
+	const rowWidth = (row: string[]): number => indentLength + 4 + row.map((cell) => (cell ?? '').trim()).join(' | ').length;
+	const naturalTotal = totalLineLength(widths, indentLength);
+	const desiredTotal = Math.max(naturalTotal, ...sparseRows.map(rowWidth));
+	const targetTotal = Math.min(desiredTotal, Math.max(cap, naturalTotal));
+	const deficit = targetTotal - naturalTotal;
+	if (deficit <= 0) {
+		return widths;
+	}
+	const share = Math.floor(deficit / widths.length);
+	const remainder = deficit % widths.length;
+	return widths.map((w, col) => w + share + (col < remainder ? 1 : 0));
 }
 
 /** Emit one table at the given width: 0 = one padded line per logical row; >0 = cells wrapped
@@ -228,12 +273,54 @@ export function computeGroupWidths(tables: ParsedTable[], tableWidth: number): n
  *  given (a header-matched group), overrides this table's own per-table width computation. */
 export function emitTable(table: ParsedTable, tableWidth: number, out: string[], sharedWidths?: number[]): void {
 	const { indent, aligns, rows, cols } = table;
-	const widths = sharedWidths ?? computeColumnWidths(rows, cols, tableWidth, indent.length);
+	const fullRows = rows.filter((row) => row.length === cols);
+	const naturalWidths = sharedWidths ?? computeColumnWidths(fullRows, cols, tableWidth, indent.length);
+	// A long sparse row can still widen the real columns to meet it — up to `tableWidth` (or
+	// unconditionally at width 0, where alignment always wins over any target). This is what lets
+	// a sparse row that fits within `tableWidth` unwrapped actually render on one line instead of
+	// wrapping just because the real columns' own natural width happened to be narrower — the real
+	// columns use whatever headroom `tableWidth` leaves after their own content, instead of that
+	// headroom going to waste while the sparse row wraps unnecessarily tighter than it has to.
+	const widths = widenForSparseRows(naturalWidths, rows, cols, indent.length, tableWidth === 0 ? Infinity : tableWidth);
 	const padLine = (cells: string[]): string => `${indent}| ${cells.map((cell, col) => (cell ?? '').trim().padEnd(widths[col], ' ')).join(' | ')} |`;
+	const totalInner = totalLineLength(widths, indent.length) - indent.length - 4;
+	// A sparse row (see scanTables) never pads its own missing trailing cells — it isn't tabular
+	// data competing for column space. At a nonzero tableWidth it WRAPS like any other row, but at
+	// the table's FULL available width rather than one column's slice of it ("it should occupy as
+	// much space as there is in the table" — it isn't really "in" any one column to begin with).
+	// Either way, EVERY physical line — wrapped or not — pads out to `totalInner` so its trailing
+	// pipe lands exactly where every other row's does; that's the same "alignment always wins" (at
+	// width 0) / "fit the target width" (at width N) guarantee the rest of the table gets, just
+	// reaching a sparse row through padding instead of through computeColumnWidths. Every physical
+	// line also keeps the row's original cell count — that's what lets collapseContinuationRows
+	// reassemble them on the next parse.
+	const emitSparse = (row: string[]): void => {
+		const cells = row.map((cell) => (cell ?? '').trim());
+		if (tableWidth === 0) {
+			const built = cells.map((cell, col) => (col < cells.length - 1 ? cell.padEnd(widths[col], ' ') : cell)).join(' | ');
+			out.push(`${indent}| ${built.padEnd(totalInner, ' ')} |`);
+			return;
+		}
+		// Every cell but the last (usually there IS no other cell) pads to its real column's width,
+		// so it stays visually anchored under that column; the last cell wraps into whatever's left
+		// of the row's total budget.
+		const fixed = cells.slice(0, -1).map((cell, col) => cell.padEnd(widths[col], ' '));
+		const fixedWidth = fixed.reduce((sum, cell) => sum + cell.length + 3, 0);
+		const wrapWidth = Math.max(totalInner - fixedWidth, MIN_COLUMN_WIDTH);
+		const wrappedLast = wrapCell(cells[cells.length - 1], wrapWidth);
+		for (let lineIndex = 0; lineIndex < wrappedLast.length; lineIndex += 1) {
+			const lineCells = lineIndex === 0 ? [...fixed, wrappedLast[lineIndex]] : [...fixed.map((cell) => ' '.repeat(cell.length)), wrappedLast[lineIndex]];
+			out.push(`${indent}| ${lineCells.join(' | ').padEnd(totalInner, ' ')} |`);
+		}
+	};
 	out.push(padLine(rows[0]));
 	out.push(`${indent}| ${widths.map((w, col) => delimiterCell(aligns[col], w)).join(' | ')} |`);
 	for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
 		const row = rows[rowIndex];
+		if (row.length < cols) {
+			emitSparse(row);
+			continue;
+		}
 		if (tableWidth === 0) {
 			out.push(padLine(row));
 			continue;
@@ -250,7 +337,10 @@ export function emitTable(table: ParsedTable, tableWidth: number, out: string[],
  *  logical row, no padding — the form Codon's webview is fed. */
 export function emitLogicalTable(table: ParsedTable, out: string[]): void {
 	const { indent, aligns, rows, cols } = table;
-	const line = (cells: string[]): string => `${indent}| ${Array.from({ length: cols }, (_, col) => (cells[col] ?? '').trim()).join(' | ')} |`;
+	// A sparse row keeps its true (fewer) cell count here too — see emitTable/scanTables for why
+	// padding it back to `cols` would erase the information that round-trips it losslessly.
+	const line = (cells: string[]): string =>
+		`${indent}| ${(cells.length < cols ? cells : Array.from({ length: cols }, (_, col) => cells[col] ?? '')).map((cell) => (cell ?? '').trim()).join(' | ')} |`;
 	out.push(line(rows[0]));
 	out.push(`${indent}| ${aligns.map(minimalDelimiter).join(' | ')} |`);
 	for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
@@ -303,8 +393,13 @@ export function scanTables(lines: string[]): TableBlock[] {
 		const cols = Math.max(...raw.map((row) => row.length));
 		// Cell text is OPAQUE to the formatter — incl. `<br>` line breaks (the canonical multi-
 		// line-cell form; the editor renders them as real breaks, see MdHardBreak/extensions.ts).
-		const padded = raw.map((row) => Array.from({ length: cols }, (_, col) => row[col] ?? ''));
-		const rows = collapseContinuationRows(padded);
+		// The header alone is padded to `cols` — it must stay rectangular to match the delimiter
+		// row. A BODY row with fewer cells is a sparse/row-spanning row (GFM has no real colspan;
+		// this is that convention) and keeps its true, unpadded cell count: padding it here would
+		// make it indistinguishable from a continuation row this formatter wrapped itself, which
+		// is exactly the round-trip bug fixed alongside emitTable/emitLogicalTable — see design.md.
+		const shaped = [Array.from({ length: cols }, (_, col) => header[col] ?? ''), ...body];
+		const rows = collapseContinuationRows(shaped);
 		const aligns = Array.from({ length: cols }, (_, col) => delimiterAlignOf(delims[col] ?? ''));
 		blocks.push({ table: { indent, aligns, rows, cols }, start, end });
 	}
