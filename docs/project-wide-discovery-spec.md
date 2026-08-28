@@ -27,18 +27,19 @@ There's no staged-files-only mode (`git diff --cached`, for a pre-commit hook): 
 | Format everything, ignoring `.gitignore` entirely     | `codon-format --all`                                                                          |
 | Format a different project without `cd`-ing there     | `codon-format --root ../other-project`                                                        |
 | Skip a directory `.gitignore` doesn't cover           | `codon-format --ignore fixtures`                                                              |
+| Skip several directories at once                      | `codon-format --ignore fixtures testdata out`                                                 |
 | Check formatting in CI without writing                | `codon-format --check`                                                                        |
 | Format only files staged for commit (pre-commit hook) | `` files=$(git diff --cached --name-only --diff-filter=ACM -- '*.md'); codon-format $files `` |
 
 ## CLI parameters
 
-| Flag                 | Default                           | Notes                                                                                                                                                    |
-| -------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<file.md ...>`      | —                                 | Explicit file paths. Mutually exclusive with `--git-driven`/`--all`.                                                                                     |
-| `--git-driven`       | on, if nothing else selects files | Delegates to `git ls-files`, respecting `.gitignore`. Falls back to `--all`'s behavior with a stderr notice outside a git working tree or without `git`. |
-| `--all`              | off                               | A plain filesystem walk that never touches git and ignores `.gitignore` entirely.                                                                        |
-| `--root <dir>`       | cwd                               | Discovery root for `--git-driven`/`--all`.                                                                                                               |
-| `--ignore <pattern>` | `[]`                              | Repeatable. Merged with the two always-on defaults (`.git`, `node_modules`), never replacing them.                                                       |
+| Flag                    | Default                           | Notes                                                                                                                                                                                                                                                                                                          |
+| ----------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<file.md ...>`         | —                                 | Explicit file paths. Mutually exclusive with `--git-driven`/`--all`.                                                                                                                                                                                                                                           |
+| `--git-driven`          | on, if nothing else selects files | Delegates to `git ls-files`, respecting `.gitignore`. Falls back to `--all`'s behavior with a stderr notice outside a git working tree or without `git`.                                                                                                                                                       |
+| `--all`                 | off                               | A plain filesystem walk that never touches git and ignores `.gitignore` entirely.                                                                                                                                                                                                                              |
+| `--root <dir>`          | cwd                               | Discovery root for `--git-driven`/`--all`.                                                                                                                                                                                                                                                                     |
+| `--ignore <pattern>...` | `[]`                              | Variadic and repeatable: one flag takes every following argument up to the next `-`-prefixed flag, and several `--ignore` flags accumulate. `--ignore=<pattern>` takes exactly one value and consumes nothing after it. Merged with the two always-on defaults (`.git`, `node_modules`), never replacing them. |
 
 ## Implementation
 

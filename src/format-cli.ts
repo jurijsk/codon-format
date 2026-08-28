@@ -5,7 +5,7 @@
  * Vscode-free, plain Node, no workspace dependency. Installed via this package's `bin` entry:
  *
  *     npx @jurijsk/codon-format <file.md ...> [--width N] [--check] [--align-tables-width]
- *     npx @jurijsk/codon-format [--git-driven|--all] [--root <dir>] [--ignore <pattern>]... [--width N] [--check] [--align-tables-width]
+ *     npx @jurijsk/codon-format [--git-driven|--all] [--root <dir>] [--ignore <pattern>...] [--width N] [--check] [--align-tables-width]
  *     # or, once added as a project dependency, drop the `npx @jurijsk/` prefix and use the bin
  *     # name directly: codon-format <file.md ...> ...
  *
@@ -38,9 +38,14 @@
  *     printing a non-fatal notice rather than erroring.
  *   - `--all` is a plain recursive filesystem walk that never touches git and ignores
  *     `.gitignore` entirely.
- *   - `--root <dir>` sets the discovery root (default: cwd); `--ignore <pattern>` (repeatable)
- *     adds exclusions on top of the two defaults (`.git`, `node_modules`), which are always
- *     merged in and can't be removed.
+ *   - `--root <dir>` sets the discovery root (default: cwd); `--ignore <pattern>...` adds
+ *     exclusions on top of the two defaults (`.git`, `node_modules`), which are always merged in
+ *     and can't be removed. It is variadic — one `--ignore a b c` says what three repeated flags
+ *     used to, taking every following argument up to the next `-`-prefixed flag — and still
+ *     repeatable, accumulating across occurrences. The cost of the greedy form: an explicit file
+ *     path written AFTER `--ignore` reads as one more pattern, so put file paths first (they're
+ *     mutually exclusive with `--git-driven`/`--all` anyway, and `--ignore` only bites in
+ *     discovery mode).
  *   - `--git-driven` is the default: given no file arguments and neither discovery flag,
  *     `codon-format` runs `--git-driven` from `--root` (cwd unless given) rather than erroring —
  *     printing a notice, since this replaces what used to be a zero-args usage error.
@@ -111,16 +116,39 @@ for (let index = 0; index < args.length; index += 1) {
 		continue;
 	}
 	if (value === '--ignore') {
-		const next = args[index + 1];
-		if (!next) {
+		const values = takeValues(args, index + 1);
+		if (values.length === 0) {
 			console.error('Missing value for --ignore.');
 			process.exit(1);
 		}
-		ignore.push(next);
-		index += 1;
+		ignore.push(...values);
+		index += values.length;
+		continue;
+	}
+	if (value.startsWith('--ignore=')) {
+		const pattern = value.slice('--ignore='.length);
+		if (pattern.length === 0) {
+			console.error('Missing value for --ignore.');
+			process.exit(1);
+		}
+		ignore.push(pattern);
 		continue;
 	}
 	explicitFiles.push(value);
+}
+
+/**
+ * Everything from `start` up to the next `-`-prefixed argument (or the end) — how `--ignore`
+ * takes its values, so one flag can carry several patterns. A pattern that itself starts with `-`
+ * therefore has to come as its own `--ignore=<pattern>`; nothing in the supported pattern dialect
+ * (see `matchesIgnore` in src/discover.ts) legitimately starts that way.
+ */
+function takeValues(args: string[], start: number): string[] {
+	const values: string[] = [];
+	for (let index = start; index < args.length && !args[index].startsWith('-'); index += 1) {
+		values.push(args[index]);
+	}
+	return values;
 }
 
 function parseWidth(value: string): number {

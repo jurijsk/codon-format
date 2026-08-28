@@ -4,6 +4,7 @@
  */
 import { computeYamlMetadataBlockLines } from './frontmatter.js';
 import { computeMdcBlockLines } from './mdc.js';
+import { computeGridTableBlockLines } from './grid-tables.js';
 import { isFenceMarker, isCommentOpener, isCommentCloser } from './fences.js';
 
 const LIST_MARKER_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
@@ -63,6 +64,11 @@ export function reflowLines(lines: string[]): string[] {
 	const out: string[] = [];
 	const yamlBlock = computeYamlMetadataBlockLines(lines);
 	const mdcBlock = computeMdcBlockLines(lines);
+	// A grid-table border line (`+---+---+`) starts with neither `|` nor any of this pass's other
+	// recognized structural markers, so without this check it would fall through to the generic
+	// prose-joining logic below and get glued into a paragraph — see grid-tables.ts's header
+	// comment and docs/design.md's "Grid tables" section.
+	const gridTableBlock = computeGridTableBlockLines(lines);
 	let buffer: ProseBuffer | null = null;
 	let inCode = false;
 	const flush = (): void => {
@@ -76,7 +82,7 @@ export function reflowLines(lines: string[]): string[] {
 	for (let index = 0; index < lines.length; index += 1) {
 		const line = lines[index];
 
-		if (yamlBlock[index] || mdcBlock[index]) {
+		if (yamlBlock[index] || mdcBlock[index] || gridTableBlock[index]) {
 			flush();
 			out.push(line);
 			continue;

@@ -49,7 +49,8 @@
 import { dominantEol, withEol } from './eol.js';
 import { reflowLines } from './reflow.js';
 import { tightenListLines } from './list-tighten.js';
-import { MIN_TABLE_WIDTH, scanTables, emitTableLines, emitTable, emitLogicalTable, transformTableLines, tableHeaderKey, computeGroupWidths, type ParsedTable } from './tables.js';
+import { MIN_TABLE_WIDTH, scanTables, emitTable, emitLogicalTable, tableHeaderKey, computeGroupWidths } from './tables.js';
+import { scanGridTables, emitGridTable, gridToParsedTable, parsedTableToGridTable, computeGridTableBlockLines, type GridTable } from './grid-tables.js';
 
 export type { Eol } from './eol.js';
 export { dominantEol, withEol } from './eol.js';
@@ -80,35 +81,99 @@ export interface FormatMarkdownOptions {
  * dominant EOL, so callers pass `document.getText()` / file contents directly and write the
  * result back without EOL bookkeeping.
  */
+/** One table block found in the document, regardless of which on-disk syntax it was written in
+ *  (plain GFM pipe, or grid) — see grid-tables.ts's header comment for why a unified
+ *  representation exists at all. Every block is normalized to `GridTable` up front: a pipe table
+ *  converts trivially (`parsedTableToGridTable` — its existing arity-1 whole-row-note convention
+ *  becomes a colSpan-`cols` cell, everything else colSpan-1), and `GridTable` is a strict
+ *  superset of what a pipe table can express, so nothing about a spanless source table is lost
+ *  going through this conversion. */
+interface FoundTable {
+	table: GridTable;
+	start: number;
+	end: number;
+	/** A cell spanning SOME but not all columns — see docs/design.md: such a table is excluded
+	 *  from cross-table width matching (`alignTablesWidth`), a deliberate, narrow scope limit,
+	 *  not a regression — a table using only the pre-existing whole-row-note convention
+	 *  (colSpan === cols) keeps matching exactly as it always has. */
+	hasPartialSpan: boolean;
+}
+
+/** Find every table block (pipe or grid syntax) in `lines`, in document order. `scanTables`
+ *  is given the grid-table block lines to skip so a `|`-content line INSIDE a grid table's own
+ *  cell text is never mistaken for the start of a nested pipe table (blocks of the two syntaxes
+ *  can never otherwise overlap — a grid table always starts with `+`, a pipe table with `|`). */
+function scanAllTables(lines: string[]): FoundTable[] {
+	const gridBlockLines = computeGridTableBlockLines(lines);
+	const pipeBlocks = scanTables(lines, gridBlockLines).map((block) => ({
+		table: parsedTableToGridTable(block.table),
+		start: block.start,
+		end: block.end,
+		hasPartialSpan: false, // a pipe-sourced table only ever has the whole-row (colSpan===cols) shape
+	}));
+	const gridBlocks = scanGridTables(lines).map((block) => ({
+		table: block.table,
+		start: block.start,
+		end: block.end,
+		hasPartialSpan: block.table.cells.some((cell) => cell.colSpan > 1 && cell.colSpan < block.table.cols),
+	}));
+	return [...pipeBlocks, ...gridBlocks].sort((a, b) => a.start - b.start);
+}
+
 export function formatMarkdown(content: string, options: FormatMarkdownOptions = {}): string {
 	const raw = options.tableWidth ?? 0;
 	const tableWidth = raw <= 0 ? 0 : Math.max(raw, MIN_TABLE_WIDTH);
 	const alignTablesWidth = options.alignTablesWidth ?? false;
 	const lines = tightenListLines(reflowLines(content.split(/\r?\n/)));
-	const blocks = scanTables(lines);
+	const blocks = scanAllTables(lines);
 	// Tables with an EXACT header match (same labels, same order) share one set of column widths
 	// — computed from their rows combined — so the same column lines up at the same width across
-	// every occurrence (e.g. one table per doc section, repeating the same schema).
-	const groupWidths = new Map<ParsedTable, number[]>();
+	// every occurrence (e.g. one table per doc section, repeating the same schema). Computed on
+	// each block's flattened (ParsedTable) projection so the exact same matching this package has
+	// always done for plain tables is unaffected; a block with a partial span never enters a
+	// group (see FoundTable.hasPartialSpan).
+	const groupWidths = new Map<FoundTable, number[]>();
 	if (alignTablesWidth) {
-		const groups = new Map<string, ParsedTable[]>();
-		for (const { table } of blocks) {
-			const key = tableHeaderKey(table);
-			const group = groups.get(key) ?? [];
-			group.push(table);
-			groups.set(key, group);
-		}
-		for (const tables of groups.values()) {
-			if (tables.length < 2) {
+		const groups = new Map<string, FoundTable[]>();
+		for (const block of blocks) {
+			if (block.hasPartialSpan) {
 				continue;
 			}
-			const widths = computeGroupWidths(tables, tableWidth);
-			for (const table of tables) {
-				groupWidths.set(table, widths);
+			const key = tableHeaderKey(gridToParsedTable(block.table));
+			const group = groups.get(key) ?? [];
+			group.push(block);
+			groups.set(key, group);
+		}
+		for (const group of groups.values()) {
+			if (group.length < 2) {
+				continue;
+			}
+			const widths = computeGroupWidths(
+				group.map((block) => gridToParsedTable(block.table)),
+				tableWidth,
+			);
+			for (const block of group) {
+				groupWidths.set(block, widths);
 			}
 		}
 	}
-	const joined = emitTableLines(lines, blocks, (table, out) => emitTable(table, tableWidth, out, groupWidths.get(table))).join('\n');
+	const out: string[] = [];
+	let blockIndex = 0;
+	for (let index = 0; index < lines.length; index += 1) {
+		const block = blocks[blockIndex];
+		if (block && block.start === index) {
+			if (tableWidth === 0) {
+				emitTable(gridToParsedTable(block.table), 0, out, groupWidths.get(block));
+			} else {
+				emitGridTable(block.table, tableWidth, out, groupWidths.get(block));
+			}
+			index = block.end - 1;
+			blockIndex += 1;
+			continue;
+		}
+		out.push(lines[index]);
+	}
+	const joined = out.join('\n');
 	// Exactly ONE final newline (the serializer emits none; hand-authored files vary) — a
 	// formatter guarantee, and what keeps the save cycle byte-stable on the last byte.
 	const trimmed = joined.replace(/\n+$/, '');
@@ -117,13 +182,27 @@ export function formatMarkdown(content: string, options: FormatMarkdownOptions =
 }
 
 /**
- * The LOGICAL (width-0, minimal) form of `content`, touching ONLY tables: continuation rows
- * collapse into their logical rows, cells unpadded — everything else byte-identical. This is
- * what Codon's host feeds the webview (markdownEditor.ts): the WYSIWYG must model logical rows,
- * never the raw file's wrap convention, and the minimal style matches the serializer's own so
- * the webview's echo comparison still works.
+ * The LOGICAL (width-0, minimal) form of `content`, touching ONLY tables: continuation rows (or
+ * a grid table's border lines) collapse into their logical rows, cells unpadded, spans flattened
+ * (see grid-tables.ts's `gridToParsedTable`) — everything else byte-identical. This is what
+ * Codon's host feeds the webview (markdownEditor.ts): the WYSIWYG must model logical rows, never
+ * the raw file's wrap convention or grid syntax, and the minimal style matches the serializer's
+ * own so the webview's echo comparison still works.
  */
 export function tablesToLogicalRows(content: string): string {
 	const lines = content.split(/\r?\n/);
-	return withEol(transformTableLines(lines, emitLogicalTable).join('\n'), dominantEol(content));
+	const blocks = scanAllTables(lines);
+	const out: string[] = [];
+	let blockIndex = 0;
+	for (let index = 0; index < lines.length; index += 1) {
+		const block = blocks[blockIndex];
+		if (block && block.start === index) {
+			emitLogicalTable(gridToParsedTable(block.table), out);
+			index = block.end - 1;
+			blockIndex += 1;
+			continue;
+		}
+		out.push(lines[index]);
+	}
+	return withEol(out.join('\n'), dominantEol(content));
 }

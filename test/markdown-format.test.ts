@@ -195,22 +195,25 @@ describe('table normalization — width 0 (pipe-aligned logical rows)', () => {
 describe('table width fitting (codon.tableWidth / --width) and the logical form', () => {
 	const wide = '| Key | Description |\n| :-- | --- |\n| alpha | a fairly long description that certainly needs to wrap onto several continuation rows |\n';
 
-	it('width N wraps cell text at whitespace onto continuation rows; lines stay under N', () => {
+	it('width N wraps cell text at whitespace into a grid table; lines stay under N', () => {
 		const out = formatMarkdown(wide, { tableWidth: 44 });
 		const tableLines = out.trimEnd().split('\n');
-		expect(tableLines.length).toBeGreaterThan(3); // continuation rows exist
+		expect(tableLines.length).toBeGreaterThan(3); // wrapped content lines exist
 		for (const line of tableLines) {
 			expect(line.length).toBeLessThanOrEqual(44);
 		}
-		// Continuation rows: empty first cell, text in the wrapped column.
+		// Grid-table borders, not GFM pipe syntax.
+		expect(tableLines[0]).toMatch(/^\+-+\+-+\+$/);
+		// A content line whose Key column is blank (padding) while Description keeps wrapping.
 		expect(tableLines.some((l) => /^\|\s+\| \S/.test(l))).toBe(true);
-		// Alignment survives the fit.
-		expect(out).toContain('| :');
+		// Alignment survives the fit, carried on the header-separator border's colons.
+		expect(out).toContain('+:');
 	});
 
 	it('the header never wraps (its column floors at the full header cell)', () => {
 		const out = formatMarkdown(wide, { tableWidth: 44 });
-		expect(out.split('\n')[0]).toContain('Description');
+		const tableLines = out.trimEnd().split('\n');
+		expect(tableLines[1]).toContain('Description'); // line 0 is the top border
 	});
 
 	it('wrap → collapse is LOSSLESS: formatting back at width 0 restores the logical table', () => {
@@ -263,6 +266,23 @@ describe('sparse rows (GFM row-spanning-note convention — no real colspan in p
 		const out = formatMarkdown(commentSrc);
 		const commentLine = out.trimEnd().split('\n').find((line) => line.includes('Comment:'));
 		expect(commentLine).toBe('| Comment: a note that spans the whole row |');
+	});
+
+	it('a row missing only its LAST column (2..cols-1 cells) is padded like an ordinary ragged row, not treated as a spanning note', () => {
+		const src =
+			'| Vital Sign | Reading | Time Taken |\n| --- | --- | --- |\n| Pulse | 79 | 03/23/2026 |\n| Inhaled Oxygen Concentration | - | - |\n| Weight | 58.5 kg | 03/23/2026 |\n';
+		const out = formatMarkdown(src);
+		expect(out).toBe(
+			'| Vital Sign                   | Reading | Time Taken |\n' +
+				'| ---------------------------- | ------- | ---------- |\n' +
+				'| Pulse                        | 79      | 03/23/2026 |\n' +
+				'| Inhaled Oxygen Concentration | -       | -          |\n' +
+				'| Weight                       | 58.5 kg | 03/23/2026 |\n',
+		);
+		// Column 0 (29 chars, "Inhaled Oxygen Concentration") drove every row's width — proof it
+		// participated in column-width computation like an ordinary row, not a sparse note.
+		const lines = out.trimEnd().split('\n');
+		expect(new Set(lines.map((l) => l.length)).size).toBe(1);
 	});
 
 	it("a sparse row wraps at the table's full width when it's longer than the target, not confined to one column", () => {
@@ -329,6 +349,99 @@ describe('sparse rows (GFM row-spanning-note convention — no real colspan in p
 
 	it('format(format(x)) === format(x) for a sparse row at a set width', () => {
 		const once = formatMarkdown(commentSrc, { tableWidth: 44 });
+		expect(formatMarkdown(once, { tableWidth: 44 })).toBe(once);
+	});
+});
+
+describe('grid tables (width N — see grid-tables.ts / docs/design.md)', () => {
+	const wide = '| Key | Description |\n| :-- | --- |\n| alpha | a fairly long description that certainly needs to wrap onto several continuation rows |\n';
+
+	it('width 0 always stays plain GFM pipe syntax, width N always emits a grid table', () => {
+		expect(formatMarkdown(wide, { tableWidth: 0 })).not.toContain('+');
+		expect(formatMarkdown(wide, { tableWidth: 44 }).split('\n')[0]).toMatch(/^\+-+\+-+\+$/);
+	});
+
+	it('a full-row-spanning note renders as one merged box (no internal border), and round-trips losslessly', () => {
+		const src = '| A | B | C |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n| Comment: this note spans the whole row |\n| 4 | 5 | 6 |\n';
+		const out = formatMarkdown(src, { tableWidth: 44 });
+		const lines = out.trimEnd().split('\n');
+		const commentBorderAbove = lines[lines.findIndex((l) => l.includes('Comment:')) - 1];
+		const commentBorderBelow = lines[lines.findIndex((l) => l.includes('Comment:')) + 1];
+		expect(commentBorderAbove).toMatch(/^\+-+\+$/); // one continuous run, no internal '+'
+		expect(commentBorderBelow).toMatch(/^\+-+\+$/);
+		expect(formatMarkdown(out, { tableWidth: 0 })).toBe(formatMarkdown(src, { tableWidth: 0 }));
+	});
+
+	it('a partial colspan (spans some but not all columns) parses, round-trips, and flattens correctly at width 0', () => {
+		// Precisely character-aligned (as this tool's own emitter would produce) — a hand-typed
+		// grid table one character off is a known Phase-1 rough edge, see docs/design.md.
+		const grid = '+--------+--------+-----+\n| A      | B      | C   |\n+========+========+=====+\n| x1     | x2     | x3  |\n+-----------------+-----+\n| merged AB value | y3  |\n+-----------------+-----+\n';
+		const out = formatMarkdown(grid, { tableWidth: 40 });
+		expect(formatMarkdown(out, { tableWidth: 40 })).toBe(out); // idempotent
+		const spanBorder = out.split('\n')[4];
+		expect(spanBorder.match(/\+/g)?.length).toBe(3); // A/B boundary merged away; start, C's own boundary, and end remain
+		const flat = formatMarkdown(grid, { tableWidth: 0 });
+		const lines = flat.trimEnd().split('\n');
+		// Flattened: anchor cell's text at column A, column B left blank, C keeps its own value.
+		expect(lines.some((l) => /\|\s*merged AB value\s*\|\s*\|\s*y3\s*\|/.test(l))).toBe(true);
+	});
+
+	it("column 0 wrapping stays within ONE row-band (the bug this architecture fixes) and round-trips losslessly", () => {
+		const src = '| Vital Sign | Reading |\n| --- | --- |\n| Inhaled Oxygen Concentration | - |\n| Weight | 58.5 kg |\n';
+		const out = formatMarkdown(src, { tableWidth: 40 });
+		const lines = out.trimEnd().split('\n');
+		// No border line sits between "Inhaled" and "Concentration" — they're one wrapped row-band.
+		const oxygenLineIndex = lines.findIndex((l) => l.includes('Inhaled'));
+		expect(lines[oxygenLineIndex + 1]).not.toMatch(/^\+/);
+		expect(formatMarkdown(out, { tableWidth: 0 })).toBe(formatMarkdown(src, { tableWidth: 0 }));
+		expect(formatMarkdown(out, { tableWidth: 40 })).toBe(out); // idempotent
+	});
+
+	it('editing one row (widening its text without touching its borders) still reformats that row AND every row below it', () => {
+		// Simulates a human hand-edit: only the "Inhaled Oxygen Concentration" row's own borders
+		// were updated (by hand, imperfectly) to fit its new text; nothing else in the table was
+		// touched. A position-anchored parser used to stop reading correctly right at this row.
+		const src =
+			'+----------------+---------------------+------------+\n' +
+			'| Vital Sign     | Reading             | Time Taken |\n' +
+			'+================+=====================+============+\n' +
+			'| Blood Pressure | 118/65              | 03/23/2026 |\n' +
+			'+----------------+---------------------+------------+\n' +
+			'| Inhaled Oxygen Concentration   | -                   | -          |\n' +
+			'+--------------+---------------------+------------+\n' +
+			'| Weight       | 58.5 kg (129 lb)    | 03/23/2026 |\n' +
+			'+--------------+---------------------+------------+\n';
+		const out = formatMarkdown(src, { tableWidth: 80 });
+		const lines = out.trimEnd().split('\n');
+		expect(new Set(lines.map((l) => l.length)).size).toBe(1); // one consistent width, top to bottom
+		expect(lines.some((l) => l.includes('Inhaled Oxygen Concentration'))).toBe(true);
+		expect(lines.some((l) => l.includes('Weight'))).toBe(true); // the row BELOW the edit also reformatted
+		expect(formatMarkdown(out, { tableWidth: 80 })).toBe(out); // idempotent
+	});
+
+	it("reflow.ts doesn't corrupt a grid table's border lines (they don't start with '|')", () => {
+		const doc = 'intro text\nthat continues\n\n' + '+-----+-----+\n| A   | B   |\n+=====+=====+\n| x   | y   |\n+-----+-----+\n' + '\nmore prose\nthat continues\n';
+		const out = reflowLines(doc.split('\n')).join('\n');
+		expect(out).toContain('+-----+-----+');
+		expect(out).toContain('+=====+=====+');
+		expect(out).toContain('intro text that continues');
+	});
+
+	it('a row-span border marker (unsupported in Phase 1) leaves the whole block untouched rather than misreading it', () => {
+		const grid = '+-----+-----+\n| A   | B   |\n+=====+=====+\n| x   |     | y1  |\n+     +-----+\n|     | y2  |\n+-----+-----+\n';
+		// deliberately malformed-for-phase-1 input; the formatter must not crash or corrupt it
+		expect(() => formatMarkdown(grid, { tableWidth: 40 })).not.toThrow();
+	});
+
+	it('cross-table width matching still shares column widths through the grid engine', () => {
+		const doc = '| Name | Note |\n| --- | --- |\n| A | x |\n\n| Name | Note |\n| --- | --- |\n| Alexandria | a longer note here |\n';
+		const out = formatMarkdown(doc, { tableWidth: 44, alignTablesWidth: true });
+		const tables = out.split('\n\n');
+		expect(tables[0].split('\n')[0]).toBe(tables[1].split('\n')[0]); // same top border on both
+	});
+
+	it('format(format(x)) === format(x) for a grid table at a set width', () => {
+		const once = formatMarkdown(wide, { tableWidth: 44 });
 		expect(formatMarkdown(once, { tableWidth: 44 })).toBe(once);
 	});
 });

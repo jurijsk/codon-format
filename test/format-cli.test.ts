@@ -197,6 +197,49 @@ describe('format-cli (compiled CLI, run as a subprocess)', () => {
 			rmSync(root, { recursive: true, force: true });
 		});
 
+		it('one --ignore takes several patterns, and repeating it still accumulates', () => {
+			const root = tempDir();
+			mkdirSync(join(root, 'output'), { recursive: true });
+			mkdirSync(join(root, 'fixtures'), { recursive: true });
+			mkdirSync(join(root, 'testdata'), { recursive: true });
+			writeFileSync(join(root, 'output', 'a.md'), UNFORMATTED);
+			writeFileSync(join(root, 'fixtures', 'b.md'), UNFORMATTED);
+			writeFileSync(join(root, 'testdata', 'c.md'), UNFORMATTED);
+			writeFileSync(join(root, 'kept.md'), UNFORMATTED);
+
+			const { stdout } = run(['--all', '--root', root, '--ignore', 'fixtures', 'testdata', '--ignore', 'output']);
+			expect(stdout).toContain(join(root, 'kept.md'));
+			expect(stdout).not.toContain(join(root, 'fixtures', 'b.md'));
+			expect(stdout).not.toContain(join(root, 'testdata', 'c.md'));
+			expect(stdout).not.toContain(join(root, 'output', 'a.md'));
+			rmSync(root, { recursive: true, force: true });
+		});
+
+		it('a variadic --ignore stops at the next flag rather than swallowing it', () => {
+			const root = tempDir();
+			mkdirSync(join(root, 'fixtures'), { recursive: true });
+			writeFileSync(join(root, 'fixtures', 'b.md'), UNFORMATTED);
+			writeFileSync(join(root, 'kept.md'), UNFORMATTED);
+
+			const { status, stdout } = run(['--ignore', 'fixtures', '--all', '--root', root, '--check']);
+			expect(status).toBe(1);
+			expect(stdout).toContain(`would format: ${join(root, 'kept.md')}`);
+			expect(stdout).not.toContain(join(root, 'fixtures', 'b.md'));
+			rmSync(root, { recursive: true, force: true });
+		});
+
+		it('--ignore=<pattern> carries a single value without consuming what follows', () => {
+			const root = tempDir();
+			mkdirSync(join(root, 'fixtures'), { recursive: true });
+			writeFileSync(join(root, 'fixtures', 'b.md'), UNFORMATTED);
+			writeFileSync(join(root, 'kept.md'), UNFORMATTED);
+
+			const { stdout } = run(['--all', '--root', root, '--ignore=fixtures']);
+			expect(stdout).toContain(join(root, 'kept.md'));
+			expect(stdout).not.toContain(join(root, 'fixtures', 'b.md'));
+			rmSync(root, { recursive: true, force: true });
+		});
+
 		it('--git-driven and --all are mutually exclusive', () => {
 			const { status, stderr } = run(['--git-driven', '--all']);
 			expect(status).toBe(1);

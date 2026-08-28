@@ -195,7 +195,7 @@ export function computeColumnWidths(rows: string[][], cols: number, maxLineLengt
  * than `width` overflows onto its own line WHOLE — never sliced: collapseContinuationRows
  * rejoins with a space, so a sliced `idempo`/`tent` would round-trip to `idempo tent`.
  */
-function wrapCell(rawValue: string, width: number): string[] {
+export function wrapCell(rawValue: string, width: number): string[] {
 	const value = rawValue.trim();
 	if (!value) {
 		return [''];
@@ -361,15 +361,20 @@ export interface TableBlock {
  * continuation rows to logical rows. Fence bodies and MDC blocks are skipped. Split out from the
  * emission walk (emitTableLines) so a caller can inspect every table up front — e.g. to match
  * headers across tables — before any of them are rendered.
+ *
+ * `extraSkip`, when given (a caller-computed `boolean[]` the same length as `lines`), marks
+ * additional lines to skip on top of the MDC/fence check — namely grid-table block lines (see
+ * grid-tables.ts's `computeGridTableBlockLines`), so a `|`-content line INSIDE a grid table's own
+ * cell content is never mistaken for the start of a nested pipe table.
  */
-export function scanTables(lines: string[]): TableBlock[] {
+export function scanTables(lines: string[], extraSkip?: boolean[]): TableBlock[] {
 	const blocks: TableBlock[] = [];
 	const mdcBlock = computeMdcBlockLines(lines);
 	const fenceProtected = computeFenceProtectedLines(lines);
 	for (let index = 0; index < lines.length; index += 1) {
 		const line = lines[index];
 		const trimmed = line.trimStart();
-		if (mdcBlock[index] || fenceProtected[index]) {
+		if (mdcBlock[index] || fenceProtected[index] || extraSkip?.[index]) {
 			continue;
 		}
 		if (!trimmed.startsWith('|') || !isDelimiterLine(lines[index + 1] ?? '')) {
@@ -393,12 +398,19 @@ export function scanTables(lines: string[]): TableBlock[] {
 		const cols = Math.max(...raw.map((row) => row.length));
 		// Cell text is OPAQUE to the formatter — incl. `<br>` line breaks (the canonical multi-
 		// line-cell form; the editor renders them as real breaks, see MdHardBreak/extensions.ts).
-		// The header alone is padded to `cols` — it must stay rectangular to match the delimiter
-		// row. A BODY row with fewer cells is a sparse/row-spanning row (GFM has no real colspan;
-		// this is that convention) and keeps its true, unpadded cell count: padding it here would
-		// make it indistinguishable from a continuation row this formatter wrapped itself, which
-		// is exactly the round-trip bug fixed alongside emitTable/emitLogicalTable — see design.md.
-		const shaped = [Array.from({ length: cols }, (_, col) => header[col] ?? ''), ...body];
+		// The header is always padded to `cols` — it must stay rectangular to match the delimiter
+		// row. A body row with EXACTLY ONE cell is a sparse/row-spanning note (GFM has no real
+		// colspan; this is that convention — see design.md) and keeps its true, unpadded cell
+		// count: padding it here would make it indistinguishable from a continuation row this
+		// formatter wrapped itself, which is exactly the round-trip bug fixed alongside
+		// emitTable/emitLogicalTable. A row with 2..cols-1 cells is NOT that convention — a table
+		// missing only its last (often-blank) column is far more likely a typo than an intentional
+		// spanning note, so it's padded like any other ragged row instead (see `MORE cells than
+		// the header` in this file's header comment for the symmetric case).
+		const shaped = [
+			Array.from({ length: cols }, (_, col) => header[col] ?? ''),
+			...body.map((row) => (row.length === 1 && cols > 1 ? row : Array.from({ length: cols }, (_, col) => row[col] ?? ''))),
+		];
 		const rows = collapseContinuationRows(shaped);
 		const aligns = Array.from({ length: cols }, (_, col) => delimiterAlignOf(delims[col] ?? ''));
 		blocks.push({ table: { indent, aligns, rows, cols }, start, end });
