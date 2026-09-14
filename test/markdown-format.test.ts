@@ -15,7 +15,7 @@
  * pinned against the real pipeline in test/formatParity.test.ts (jsdom, test-only oracle).
  */
 import { describe, it, expect } from 'vitest';
-import { formatMarkdown, tablesToLogicalRows, dominantEol, withEol, reflowLines, splitTableRow, isDelimiterLine } from '../src/markdown-format.js';
+import { formatMarkdown, minifyMarkdown, dominantEol, withEol, reflowLines, splitTableRow, isDelimiterLine } from '../src/markdown-format.js';
 
 describe('paragraph reflow', () => {
 	it('joins a wrapped paragraph to one line', () => {
@@ -65,6 +65,12 @@ describe('paragraph reflow', () => {
 		expect(out).toContain('line with break\\\nnext');
 		expect(out).toContain('[ref]: https://example.com\nprose');
 		expect(out).toContain('{{< include x.md >}}\nmore');
+	});
+
+	it('reflow: false skips paragraph joining and list-tightening, agreeing with minifyMarkdown on prose', () => {
+		const src = 'one two\nthree four\nfive\n\n- item one\n\n- item two\n';
+		expect(formatMarkdown(src, { reflow: false })).toBe(src);
+		expect(formatMarkdown(src, { reflow: false })).toBe(minifyMarkdown(src));
 	});
 });
 
@@ -222,9 +228,9 @@ describe('table width fitting (codon.tableWidth / --width) and the logical form'
 		expect(formatMarkdown(atWidth, { tableWidth: 0 })).toBe(atZero);
 	});
 
-	it('tablesToLogicalRows collapses continuation rows to minimal one-line rows and touches nothing else', () => {
+	it('minifyMarkdown collapses a wrapped grid table back to minimal one-line rows and touches nothing else', () => {
 		const atWidth = formatMarkdown(`intro prose\nthat stays wrapped here\n\n${wide}`, { tableWidth: 44 });
-		const logical = tablesToLogicalRows(atWidth);
+		const logical = minifyMarkdown(atWidth);
 		// Prose is NOT reflowed by the logical feed (it only touches tables)…
 		expect(logical).toContain('intro prose that stays wrapped here'); // already joined by the width format
 		// …and the table is back to one minimal line per logical row.
@@ -384,6 +390,12 @@ describe('grid tables (width N — see grid-tables.ts / docs/design.md)', () => 
 		const lines = flat.trimEnd().split('\n');
 		// Flattened: anchor cell's text at column A, column B left blank, C keeps its own value.
 		expect(lines.some((l) => /\|\s*merged AB value\s*\|\s*\|\s*y3\s*\|/.test(l))).toBe(true);
+	});
+
+	it('ignoreGridTables leaves a grid-table-shaped block byte-identical instead of normalizing it to a pipe table', () => {
+		const grid = '+--------+--------+-----+\n| A      | B      | C   |\n+========+========+=====+\n| x1     | x2     | x3  |\n+-----------------+-----+\n| merged AB value | y3  |\n+-----------------+-----+\n';
+		expect(formatMarkdown(grid)).not.toBe(grid); // default: recognized and normalized to a pipe table
+		expect(formatMarkdown(grid, { ignoreGridTables: true })).toBe(grid); // opted out: passed through verbatim
 	});
 
 	it("column 0 wrapping stays within ONE row-band (the bug this architecture fixes) and round-trips losslessly", () => {
@@ -547,6 +559,12 @@ describe('idempotence & EOL', () => {
 	it('preserves the dominant EOL', () => {
 		expect(formatMarkdown('a b\r\nc d\r\n')).toBe('a b c d\r\n');
 		expect(formatMarkdown('a b\nc d\n')).toBe('a b c d\n');
+	});
+
+	it('trailingNewline: false strips every trailing newline and adds none back', () => {
+		expect(formatMarkdown('one two\nthree\n\n\n')).toBe('one two three\n'); // default: exactly one
+		expect(formatMarkdown('one two\nthree\n\n\n', { trailingNewline: false })).toBe('one two three');
+		expect(formatMarkdown('', { trailingNewline: false })).toBe('');
 	});
 
 	it('dominantEol picks CRLF only when it outnumbers bare LF', () => {

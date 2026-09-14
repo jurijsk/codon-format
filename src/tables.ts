@@ -88,54 +88,6 @@ function minimalDelimiter(align: ColumnAlign): string {
 	}
 }
 
-/**
- * Merge continuation rows back into their logical rows (water's inverse-wrap). Two shapes qualify,
- * both gated on `collapsed.length > 1` — a continuation directly under the header stays (there is
- * no data row above to join):
- *
- * - A FULL-arity row (as many cells as the table's column count) whose FIRST cell is empty while
- *   any other cell has text is the wrapped tail of a FULL row above — its cell text joins the
- *   corresponding cell with a space.
- * - A SPARSE row (fewer cells than the column count — GFM's row-spanning-note convention, e.g. a
- *   `| Comment: … |` row under a 5-column header) whose cell count matches the row directly above
- *   it (also sparse) is the wrapped tail of THAT sparse row — emitTable wraps a sparse row's own
- *   content at the table's full width when `tableWidth` is nonzero, and every piece keeps the
- *   original's cell count, so two sparse rows in a row are always parts of the same logical row
- *   split apart by wrapping. (Two genuinely independent adjacent sparse rows of the same arity —
- *   an unusual thing to author — get merged into one under this rule too; see design.md.)
- *
- * A full row's continuation can never land on a sparse row or vice versa (unmatched arity), which
- * is what keeps this safe — see the pitfall this fixed in ../docs/design.md. This runs before ALL
- * other table work, so a file written at any width normalizes losslessly back to logical rows.
- */
-function collapseContinuationRows(rows: string[][]): string[][] {
-	if (rows.length <= 2) {
-		return rows;
-	}
-	const cols = Math.max(...rows.map((row) => row.length));
-	const collapsed: string[][] = [rows[0]];
-	for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-		const row = rows[rowIndex].slice();
-		const previous = collapsed[collapsed.length - 1];
-		const fullContinuation =
-			row.length === cols && previous.length === cols && row[0].trim().length === 0 && row.slice(1).some((cell) => cell.trim().length > 0);
-		const sparseContinuation = row.length < cols && row.length === previous.length;
-		if (collapsed.length === 1 || (!fullContinuation && !sparseContinuation)) {
-			collapsed.push(row);
-			continue;
-		}
-		for (let col = 0; col < row.length; col += 1) {
-			const continuation = row[col].trim();
-			if (!continuation) {
-				continue;
-			}
-			const current = previous[col].trim();
-			previous[col] = current ? `${current} ${continuation}` : continuation;
-		}
-	}
-	return collapsed;
-}
-
 /** `| cell | cell |` line length for the given column widths (plus the block's indent). */
 function totalLineLength(widths: number[], indentLength: number): number {
 	return widths.reduce((sum, w) => sum + w, 0) + widths.length * 3 + 1 + indentLength;
@@ -192,8 +144,8 @@ export function computeColumnWidths(rows: string[][], cols: number, maxLineLengt
 
 /**
  * Wrap a cell's text at whitespace into lines of at most `width` characters. A token longer
- * than `width` overflows onto its own line WHOLE — never sliced: collapseContinuationRows
- * rejoins with a space, so a sliced `idempo`/`tent` would round-trip to `idempo tent`.
+ * than `width` overflows onto its own line WHOLE — never sliced: a sliced `idempo`/`tent` would
+ * rejoin as `idempo tent` when the wrapped lines are later read back and re-joined with a space.
  */
 export function wrapCell(rawValue: string, width: number): string[] {
 	const value = rawValue.trim();
@@ -291,9 +243,13 @@ export function emitTable(table: ParsedTable, tableWidth: number, out: string[],
 	// Either way, EVERY physical line — wrapped or not — pads out to `totalInner` so its trailing
 	// pipe lands exactly where every other row's does; that's the same "alignment always wins" (at
 	// width 0) / "fit the target width" (at width N) guarantee the rest of the table gets, just
-	// reaching a sparse row through padding instead of through computeColumnWidths. Every physical
-	// line also keeps the row's original cell count — that's what lets collapseContinuationRows
-	// reassemble them on the next parse.
+	// reaching a sparse row through padding instead of through computeColumnWidths. NOTE: unlike
+	// the main formatMarkdown pipeline (which only ever calls emitTable at width 0 — nonzero width
+	// goes through emitGridTable instead, see markdown-format.ts), a direct caller invoking this
+	// exported function at a nonzero width gets output whose wrapped physical lines are NOT
+	// reassembled back into one logical row by scanTables on a later parse; each becomes its own
+	// separate sparse row instead. This wrapping mode is a rendering-only convenience for direct
+	// callers, not a round-trip-safe on-disk format.
 	const emitSparse = (row: string[]): void => {
 		const cells = row.map((cell) => (cell ?? '').trim());
 		if (tableWidth === 0) {
@@ -334,8 +290,8 @@ export function emitTable(table: ParsedTable, tableWidth: number, out: string[],
 }
 
 /** Emit one table in the LOGICAL, minimal (serializer-style) form: one `| a | b |` line per
- *  logical row, no padding — the form Codon's webview is fed. */
-export function emitLogicalTable(table: ParsedTable, out: string[]): void {
+ *  logical row, no column-width padding — the form Codon's webview is fed. */
+export function minifyTable(table: ParsedTable, out: string[]): void {
 	const { indent, aligns, rows, cols } = table;
 	// A sparse row keeps its true (fewer) cell count here too — see emitTable/scanTables for why
 	// padding it back to `cols` would erase the information that round-trips it losslessly.
@@ -357,10 +313,13 @@ export interface TableBlock {
 }
 
 /**
- * Find each GFM table block (a `|` row followed by a delimiter row) in `lines`, collapsing its
- * continuation rows to logical rows. Fence bodies and MDC blocks are skipped. Split out from the
- * emission walk (emitTableLines) so a caller can inspect every table up front — e.g. to match
- * headers across tables — before any of them are rendered.
+ * Find each GFM table block (a `|` row followed by a delimiter row) in `lines`. Every pipe table
+ * encountered is assumed properly authored — no continuation-row collapsing (removed; grid
+ * tables now own all nonzero-width wrapping unambiguously, so pipe tables no longer need a
+ * heuristic to undo one) — the only row shape treated specially is a body row with exactly one
+ * cell, GFM's own row-spanning-note convention (see the shaping below). Fence bodies and MDC
+ * blocks are skipped. Split out from the emission walk (emitTableLines) so a caller can inspect
+ * every table up front — e.g. to match headers across tables — before any of them are rendered.
  *
  * `extraSkip`, when given (a caller-computed `boolean[]` the same length as `lines`), marks
  * additional lines to skip on top of the MDC/fence check — namely grid-table block lines (see
@@ -387,6 +346,16 @@ export function scanTables(lines: string[], extraSkip?: boolean[]): TableBlock[]
 		const delims = splitTableRow(lines[index + 1]);
 		const body: string[][] = [];
 		index += 2;
+		// A `|` line immediately followed by a delimiter-row-shaped line is NOT a reliable signal
+		// of a new table's header — a genuine data row whose cells happen to be dash-only
+		// placeholders (e.g. "N/A", a realistic convention in real-world data) is syntactically
+		// indistinguishable from a real delimiter row, and every mainstream GFM implementation
+		// (remark-gfm, marked, comark — all checked directly) treats two `|`-blocks with no blank
+		// line between them as ONE table regardless, never re-triggering "table start" mid-body.
+		// Matching that real-world behavior here, rather than trying to be smarter than it, is
+		// the safe choice: a heuristic that "detects" a new table risks silently reformatting
+		// genuine data (a placeholder row's dashes) into pure formatting dashes, which is worse
+		// than the merged-table outcome it would have prevented.
 		while (index < lines.length && lines[index].trimStart().startsWith('|')) {
 			body.push(splitTableRow(lines[index]));
 			index += 1;
@@ -401,17 +370,16 @@ export function scanTables(lines: string[], extraSkip?: boolean[]): TableBlock[]
 		// The header is always padded to `cols` — it must stay rectangular to match the delimiter
 		// row. A body row with EXACTLY ONE cell is a sparse/row-spanning note (GFM has no real
 		// colspan; this is that convention — see design.md) and keeps its true, unpadded cell
-		// count: padding it here would make it indistinguishable from a continuation row this
-		// formatter wrapped itself, which is exactly the round-trip bug fixed alongside
-		// emitTable/emitLogicalTable. A row with 2..cols-1 cells is NOT that convention — a table
-		// missing only its last (often-blank) column is far more likely a typo than an intentional
+		// count: padding it here would erase the only signal pipe syntax has for "this row spans
+		// the whole table" — a padded row with blank trailing cells is indistinguishable from an
+		// ordinary short row. A row with 2..cols-1 cells is NOT that convention — a table missing
+		// only its last (often-blank) column is far more likely a typo than an intentional
 		// spanning note, so it's padded like any other ragged row instead (see `MORE cells than
 		// the header` in this file's header comment for the symmetric case).
-		const shaped = [
+		const rows = [
 			Array.from({ length: cols }, (_, col) => header[col] ?? ''),
 			...body.map((row) => (row.length === 1 && cols > 1 ? row : Array.from({ length: cols }, (_, col) => row[col] ?? ''))),
 		];
-		const rows = collapseContinuationRows(shaped);
 		const aligns = Array.from({ length: cols }, (_, col) => delimiterAlignOf(delims[col] ?? ''));
 		blocks.push({ table: { indent, aligns, rows, cols }, start, end });
 	}

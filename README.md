@@ -81,7 +81,16 @@ import { formatMarkdown } from '@jurijsk/codon-format';
 const formatted = formatMarkdown(sourceText, { tableWidth: 0 });
 ```
 
-`formatMarkdown(content: string, options?: { tableWidth?: number; alignTablesWidth?: boolean }): string` — pure string→string, preserves the input's dominant EOL. `tableWidth` defaults to `0`. `alignTablesWidth` defaults to `false` — every table sizes to only its own content; set it to `true` to have tables sharing an exact header elsewhere in the document share one set of column widths instead.
+`formatMarkdown(content: string, options?: { tableWidth?: number; alignTablesWidth?: boolean; reflow?: boolean; ignoreGridTables?: boolean; trailingNewline?: boolean }): string` — pure string→string, preserves the input's dominant EOL. `tableWidth` defaults to `0`. `alignTablesWidth` defaults to `false` — every table sizes to only its own content; set it to `true` to have tables sharing an exact header elsewhere in the document share one set of column widths instead. `reflow` defaults to `true` (paragraphs/list items join to one line each, matching blank lines between list items dropped); set it to `false` to leave every non-table line exactly as authored — this is what makes `formatMarkdown` agree with `minifyMarkdown` on prose. `ignoreGridTables` defaults to `false`; set it to `true` to never recognize a Pandoc/reST-style grid table (`+---+` borders) as a table at all — useful when formatting a fragment of a larger document, where unrelated `+---+`-bordered content could coincidentally match that syntax. `trailingNewline` defaults to `true` (exactly one final newline, the whole-file guarantee); set it to `false` to strip every trailing newline and add none back, for a fragment that will be embedded inside a larger document.
+
+```ts
+import { minifyMarkdown } from '@jurijsk/codon-format';
+
+minifyMarkdown('| Name         | Note |\n| ------------ | ---- |\n| Ada Lovelace | x    |\n');
+// -> '| Name | Note |\n| --- | --- |\n| Ada Lovelace | x |\n'
+```
+
+`minifyMarkdown(content: string): string` — minimizes every table and leaves everything else byte-identical (it touches ONLY tables — no paragraph/list reflow, unlike `formatMarkdown`): cell padding collapses to one space, and delimiter cells collapse to the minimal `---`/`:---`/`---:`/`:---:` spelling regardless of column width (never padded to match a column's widest cell, unlike `formatMarkdown` at `tableWidth: 0`). This is what feeds `jurijsk.codon`'s webview — the WYSIWYG must model logical rows, never the raw file's padding or wrap convention.
 
 ```ts
 import { discoverMarkdownFiles } from '@jurijsk/codon-format';
